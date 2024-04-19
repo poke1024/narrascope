@@ -16,7 +16,7 @@ from functools import reduce
 from intervaltree import Interval, IntervalTree
 
 
-SCHEMA_VERSION = "2024-03-13"
+SCHEMA_VERSION = "2024-04-19"
 
 
 class Video:
@@ -51,6 +51,7 @@ class Corpus:
 			try:
 				video_data.append(video.export(catalog))
 			except Exception as e:
+				print(e)
 				raise click.ClickException(f"failed to process {p}")
 	
 		with open(out_path, "w") as f:
@@ -60,7 +61,7 @@ class Corpus:
 			}, sort_keys=True, indent=4))
 
 
-class ShotDistanceClassification:
+class FramewiseShotScaleClassification:
 	def __init__(self, path):
 		with open(path / "camera_size_classification.pkl", "rb") as f:
 			data = pickle.load(f)
@@ -69,6 +70,14 @@ class ShotDistanceClassification:
 			re.sub("^p_", "", x)
 			for x in data["output_data"]["index"]]
 
+		self.full_names = {
+			"ECU": "EXTREME_CLOSE_UP",
+			"CU": "CLOSE_UP",
+			"MS": "MEDIUM_SHOT",
+			"FS": "FULL_SHOT",
+			"LS": "LONG_SHOT"
+		}
+		
 		dt = data["output_data"]["delta_time"]
 
 		self.tree = IntervalTree([
@@ -80,7 +89,7 @@ class ShotDistanceClassification:
 
 	def query(self, t0, t1):
 		y = np.sum([iv.data for iv in self.tree.overlap(t0, t1)], axis=0)
-		return self.index[np.argmax(y)]
+		return self.full_names[self.index[np.argmax(y)]]
 
 
 class Box:
@@ -317,7 +326,7 @@ class SpeakerSentimentData:
 		self.p_list = p_list(
 			[self.label_map[i] for i in range(len(self.label_map))],
 			0.5,
-			k_filter=lambda x: x.upper())
+			k_filter=lambda x: x.upper() + "_SENTIMENT")
 	
 	def query(self, t0, t1):
 		y = weighted_prob(self.tree, t0, t1, "prob")
@@ -400,7 +409,7 @@ class SpeakerSegmentClfData:
 		return weighted_mode(self.tree, t0, t1, "gender_pred", "UNKNOWN_GENDER").upper()
 
 
-def load_stability_data(path, method):
+def load_stability_data(path, method, feature):
 	with open(path / f"{method}_shot_similarity.pkl", "rb") as f:
 		data = pickle.load(f)
 
@@ -413,17 +422,78 @@ def load_stability_data(path, method):
 	for x in data["output_data"]:
 		t0 = x["shot"]["start"]
 		t1 = x["shot"]["end"]
-		r[(t0, t1)] = round(float(f(x["next_1"])), 2)
+		r[(t0, t1)] = round(float(f(x[feature])), 2)
 	return r
 
 
 class ShotStabilityData:
-	def __init__(self, path):
+	def __init__(self, path, feature):
 		methods = ["xclip", "videomae", "vitB", "siglip", "places"]
-		self.data = dict((k, load_stability_data(path, k)) for k in methods)
+		self.data = dict((k, load_stability_data(path, k, feature)) for k in methods)
 	
 	def query(self, t0, t1):
 		return dict((k.lower(), v[(t0, t1)]) for k, v in self.data.items())
+
+
+def mode(xs):
+	return collections.Counter(xs).most_common(1)[0][0]
+
+
+class ShotAngleData:
+	def __init__(self, path):
+		with open(path / "videoshot_angle.pkl", "rb") as f:
+			self.shot_angle_data = pickle.load(f)
+
+		self.data = {}
+		
+		for x in self.shot_angle_data["output_data"]:
+			self.data[(x["shot"]["start"], x["shot"]["end"])] = mode(x["predictions"]).upper()
+	
+	def query(self, t0, t1):
+		return self.data[(t0, t1)]
+
+
+class ShotLevelData:
+	def __init__(self, path):
+		with open(path / "videoshot_level.pkl", "rb") as f:
+			self.shot_angle_data = pickle.load(f)
+
+		self.data = {}
+		
+		for x in self.shot_angle_data["output_data"]:
+			self.data[(x["shot"]["start"], x["shot"]["end"])] = mode(x["predictions"]).upper()
+	
+	def query(self, t0, t1):
+		return self.data[(t0, t1)]
+
+
+class ShotScaleMovementData:
+	def __init__(self, path):
+		with open(path / "videoshot_scalemovement.pkl", "rb") as f:
+			self.shot_angle_data = pickle.load(f)
+
+		self._scale = {}
+		self._movement = {}
+		
+		full_scale_names = {
+			"ECS": "EXTREME_CLOSE_UP",
+			"CS": "CLOSE_UP",
+			"MS": "MEDIUM_SHOT",
+			"FS": "FULL_SHOT",
+			"LS": "LONG_SHOT"
+		}
+
+		for x in self.shot_angle_data["output_data"]:
+			key = (x["shot"]["start"], x["shot"]["end"])
+			scale, movement = x["prediction"]
+			self._scale[key] = full_scale_names[scale.upper()]
+			self._movement[key] = movement.upper()
+	
+	def scale(self, t0, t1):
+		return self._scale[(t0, t1)]
+
+	def movement(self, t0, t1):
+		return self._movement[(t0, t1)]
 
 
 class ShotData:
@@ -434,10 +504,15 @@ class ShotData:
 		self.path = path
 
 	def iter(self):
-		shot_distance_classification = ShotDistanceClassification(self.path)
+		#shot_scale_classification = FramewiseShotScaleClassification(self.path)
 		face_data = FaceData(self.path)
 		speaker_audio_clf = SpeakerAudioClfData(self.path)
-		stability_data = ShotStabilityData(self.path)
+		shot_angle_data = ShotAngleData(self.path)
+		shot_level_data = ShotLevelData(self.path)
+		scale_movement_data = ShotScaleMovementData(self.path)
+
+		shot_sim_1 = ShotStabilityData(self.path, "next_1")
+		shot_sim_2 = ShotStabilityData(self.path, "next_2")
 		
 		for shot_rec in self.shot_detection_data["output_data"]["shots"]:
 			t0 = float(shot_rec["start"])
@@ -445,10 +520,17 @@ class ShotData:
 			yield {
 				"startTime": t0,
 				"endTime": t1,
-				"distance": shot_distance_classification.query(t0, t1),
+				#"scale": shot_scale_classification.query(t0, t1),
+				"scale": scale_movement_data.scale(t0, t1),
+				"angle": shot_angle_data.query(t0, t1),
+				"level": shot_level_data.query(t0, t1),
+				"movement": scale_movement_data.movement(t0, t1),
 				"faces": list(face_data.query(t0, t1)),
 				"tags": speaker_audio_clf.query(t0, t1),
-				"stability": stability_data.query(t0, t1)
+				"experimental": {
+					"similarityNext1": shot_sim_1.query(t0, t1),
+					"similarityNext2": shot_sim_2.query(t0, t1)
+				}
 			}
 			
 
@@ -599,8 +681,11 @@ class Video:
 def tib2nar(pkl, out):
 	"""Convert directory of TIB files (PKL) to narrascope JSON data file (OUT)."""
 	out = Path(out)
-	if out.name != "corpus.json":
-		raise click.BadArgumentUsage("output file must be named corpus.json")
+	if not out.suffix == ".json":
+		raise click.BadArgumentUsage("output file must end in .json")
+
+	if not out.parent.exists():
+		raise click.BadArgumentUsage(f"output path does not exist: {out.parent}")		
 	
 	corpus = Corpus.read(Path(pkl))
 	corpus.export(out)
