@@ -1,0 +1,145 @@
+<library>
+    <section>
+        <name>FEPs</name>
+        <subsection>
+            <name>cuts</name>
+            <pattern>
+                <name>cut-in</name>
+                <code><![CDATA[
+match [
+{faces = f1, scale = s1},
+{faces = f2, scale < s1},
+{faces = f3}]
+from shots
+where actor_relation(f1, f3) == SAME and actor_relation(f1, f2) == DIFFERENT
+				]]></code>
+            </pattern>
+            <pattern>
+                <name>cut-away</name>
+                <code><![CDATA[
+match [
+{faces = f1, scale = s1},
+{faces = f2, scale > s1},
+{faces = f3}]
+from shots
+where actor_relation(f1, f3) == SAME and actor_relation(f1, f2) == DIFFERENT
+				]]></code>
+
+            </pattern>
+        </subsection>
+        <subsection>
+            <name>intensification</name>
+            <pattern>
+                <name>2 shots</name>
+                <code><![CDATA[
+match [
+# shot 1: some person "a", scale s1
+{faces = [{id = a}], scale = s1, experimental = {similarityNext1 = {xclip > 0.2}}},
+# shot 2: same person "a", smaller scale
+{faces = [{id = a}], scale < s1}
+] from shots
+				]]></code>
+            </pattern>
+            <pattern>
+                <name>3 shots</name>
+                <code><![CDATA[
+match [
+{faces = [{id = a}], scale = s1},
+{faces = [{id = a}], scale < s1, scale = s2},
+{faces = [{id = a}], scale < s2}
+] from shots
+				]]></code>
+            </pattern>
+        </subsection>
+        <subsection>
+            <name>shot/reverse shot</name>
+            <pattern>
+                <code><![CDATA[
+match [
+{faces = [{id = a, gaze = g1}]},
+{faces = [{id = b, gaze = g2}]},
+{faces = [{id = a, gaze = g3}]}
+] from shots where a != b and all(lambda g: abs(g.h) > 2.5, [g1, g2, g3])
+				]]></code>
+            </pattern>
+        </subsection>
+        <subsection>
+            <name>POV</name>        	
+            <pattern>
+                <code><![CDATA[
+match [
+{faces = f1, scale < MEDIUM_SHOT},
+{faces = f2},
+{faces = f3, scale < MEDIUM_SHOT}]
+from shots
+where actor_relation(f1, f3) == SAME and actor_relation(f1, f2) == DIFFERENT
+				]]></code>
+            </pattern>
+        </subsection>
+        <subsection>
+            <name>region</name>
+            <pattern>
+                <name>frameshare</name>
+                <code><![CDATA[
+match [
+{faces = [{id = a}, {region = ra}]},
+{faces = [{id = b}, {region = rb}]}
+] from shots
+where a != b and region_relation(ra, rb) == SAME
+				]]></code>
+            </pattern>
+            <pattern>
+                <name>opposition</name>
+                <code><![CDATA[
+match [
+{faces = [{id = a}, {region = ra}]},
+{faces = [{id = b}, {region = rb}]}
+] from shots
+where a != b and region_relation(ra, rb) == DIFFERENT
+				]]></code>
+            </pattern>
+        </subsection>
+    </section>
+    <section>
+        <name>Strategies</name>
+        <subsection>
+            <name>individualisation</name>
+                <pattern>
+                    <code><![CDATA[
+match [
+{faces = [{id = a}], scale <= MEDIUM_SHOT, st = st1},
+{faces = [{id = a}], scale <= MEDIUM_SHOT}
+] from shots join speakerTurns as st
+where max(st1.words.propn) > 0
+					]]></code>
+                </pattern>
+        </subsection>
+        <subsection>
+            <name>emotionalisation</name>
+            <pattern>
+                <name>based on face emotion</name>
+                <code><![CDATA[
+match [
+{faces=[{emotion={top=a}}]},
+{faces=[{emotion={top=a}}]}
+] from shots where a != "unknown"
+				]]></code>
+            </pattern>
+            <pattern>
+                <name>based on speaker emotion</name>
+                <code><![CDATA[
+match [
+{emotion={top=a}},
+{emotion={top=a}}
+] from speakerTurns where a != "unknown"
+				]]></code>
+            </pattern>
+        </subsection>
+    </section>
+    <section>
+        <name>Explore</name>
+    </section>
+    <section>
+        <name>Tutorial</name>
+    </section>
+</library>
