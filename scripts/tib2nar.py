@@ -8,6 +8,7 @@ import re
 import collections
 import base64
 import datetime
+import traceback
 
 from pathlib import Path
 from tqdm import tqdm
@@ -16,7 +17,7 @@ from functools import reduce
 from intervaltree import Interval, IntervalTree
 
 
-SCHEMA_VERSION = "2024-04-19"
+SCHEMA_VERSION = "2024-05-15"
 
 
 class Video:
@@ -158,6 +159,15 @@ def to_speaker_turns(segments):
 		}
 
 
+def top_of_p_list(xs, min_p=0.5):
+	if xs:
+		best = max(xs, key=lambda x: x["p"])
+		if best["p"] > min_p:
+			return best["name"]
+
+	return "undefined"
+
+
 def p_list(keys, threshold, k_filter=None):
 	if k_filter is None:
 		k_filter = lambda k: k.lower()
@@ -234,11 +244,16 @@ class FaceData:
 			screen_time = min(1., np.sum([x["delta_time"] for x in xs]) / (t1 - t0))
 			if screen_time < 0.5:
 				continue
+
+			emotions = self.emotion_p_list(
+				np.mean([x["emotion"] for x in xs], axis=0))
 			
 			yield {
 				"id": str(k),
-				"emotion": self.emotion_p_list(
-					np.mean([x["emotion"] for x in xs], axis=0)),
+				"emotion": {
+					"top": top_of_p_list(emotions),
+					"all": emotions
+				},
 				"head": dict((k, int(v)) for k, v in zip(
 					self.headpose_keys,
 					np.mean([x["headpose"] for x in xs], axis=0))),
@@ -550,9 +565,11 @@ class SpeakerTurnData:
 		speaker_audio_clf = SpeakerAudioClfData(self.path)
 		speaker_segment_clf = SpeakerSegmentClfData(self.path)
 		
+
 		for turn in self.turns:
 			t0 = float(turn["start"])
 			t1 = float(turn["end"])
+			emotions = speaker_segment_clf.emotion(t0, t1)
 			yield {
 				"id": turn["speaker"],
 				"startTime": t0,
@@ -562,7 +579,10 @@ class SpeakerTurnData:
 				"sentiment": speaker_sentiment.query(t0, t1),
 				"tags": speaker_audio_clf.query(t0, t1),
 				"gender": speaker_segment_clf.gender(t0, t1),
-				"emotion": speaker_segment_clf.emotion(t0, t1)
+				"emotion": {
+					"top": top_of_p_list(emotions),
+					"all": emotions
+				}
 			}
 
 
@@ -687,8 +707,11 @@ def tib2nar(pkl, out):
 	if not out.parent.exists():
 		raise click.BadArgumentUsage(f"output path does not exist: {out.parent}")		
 	
-	corpus = Corpus.read(Path(pkl))
-	corpus.export(out)
+	try:
+		corpus = Corpus.read(Path(pkl))
+		corpus.export(out)
+	except:
+		traceback.print_exc()
 	
 	print(f"successfully exported {out}")
 
