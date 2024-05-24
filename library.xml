@@ -34,7 +34,7 @@ where actor_relation(f1, f3) == SAME and actor_relation(f1, f2) == DIFFERENT
                 <code><![CDATA[
 match [
 # shot 1: some person "a", scale s1
-{faces = [{id = a}], scale = s1, experimental = {similarityNext1 = {xclip > 0.2}}},
+{faces = [{id = a}], scale = s1, experimental = {similarityNext1 = {places > 0.2}}},
 # shot 2: same person "a", smaller scale
 {faces = [{id = a}], scale < s1}
 ] from shots
@@ -82,8 +82,8 @@ where actor_relation(f1, f3) == SAME and actor_relation(f1, f2) == DIFFERENT
                 <name>frameshare</name>
                 <code><![CDATA[
 match [
-{faces = [{id = a}, {region = ra}]},
-{faces = [{id = b}, {region = rb}]}
+{faces = [{id = a, region = ra, actor = True}]},
+{faces = [{id = b, region = rb, actor = True}]}
 ] from shots
 where a != b and region_relation(ra, rb) == SAME
 				]]></code>
@@ -92,8 +92,8 @@ where a != b and region_relation(ra, rb) == SAME
                 <name>opposition</name>
                 <code><![CDATA[
 match [
-{faces = [{id = a}, {region = ra}]},
-{faces = [{id = b}, {region = rb}]}
+{faces = [{id = a, region = ra, actor = True}]},
+{faces = [{id = b, region = rb, actor = True}]}
 ] from shots
 where a != b and region_relation(ra, rb) == DIFFERENT
 				]]></code>
@@ -122,7 +122,7 @@ where max(st1.words.propn) > 0
 match [
 {faces=[{emotion={top=a}}]},
 {faces=[{emotion={top=a}}]}
-] from shots where a != "unknown"
+] from shots where a != "unknown" and a != "neutral"
 				]]></code>
             </pattern>
             <pattern>
@@ -131,7 +131,7 @@ match [
 match [
 {emotion={top=a}},
 {emotion={top=a}}
-] from speakerTurns where a != "unknown"
+] from speakerTurns where a != "unknown" and a != "neutral"
 				]]></code>
             </pattern>
         </subsection>
