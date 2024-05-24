@@ -17,7 +17,7 @@ from functools import reduce
 from intervaltree import Interval, IntervalTree
 
 
-SCHEMA_VERSION = "2024-05-15"
+SCHEMA_VERSION = "2024-05-24"
 
 
 class Video:
@@ -595,6 +595,7 @@ class SimpleCatalog:
 				month = int(m.group(1)[4:6])
 				day = int(m.group(1)[6:8])
 				return {
+					"filename": path.name,
 					"channel": "Tagesschau",
 					"title": f"Sendung vom {day}.{month}.{year}",
 					"publishedAt": datetime.datetime(year, month, day).timestamp(),
@@ -609,6 +610,7 @@ class SimpleCatalog:
 				month = int(m.group(2))
 				day = int(m.group(3))
 				return {
+					"filename": path.name,
 					"channel": "BildTV",
 					"title": f"BildTV vom {day}.{month}.{year}",
 					"publishedAt": datetime.datetime(year, month, day).timestamp(),
@@ -625,6 +627,7 @@ class SimpleCatalog:
 				month = int(m.group(2))
 				day = int(m.group(3))
 				return {
+					"filename": path.name,
 					"channel": "CompactTV",
 					"title": f"Sendung vom {day}.{month}.{year}",
 					"publishedAt": datetime.datetime(year, month, day).timestamp(),
@@ -637,6 +640,7 @@ class SimpleCatalog:
 				month = int(m.group(2))
 				day = int(m.group(3))
 				return {
+					"filename": path.name,
 					"channel": "CompactTV",
 					"title": f"Sendung vom {day}.{month}.{year}",
 					"publishedAt": datetime.datetime(year, month, day).timestamp(),
@@ -653,6 +657,7 @@ class SimpleCatalog:
 				month = int(m.group(2))
 				day = int(m.group(3))
 				return {
+					"filename": path.name,
 					"channel": "Heute Journal",
 					"title": f"Sendung vom {day}.{month}.{year}",
 					"publishedAt": datetime.datetime(year, month, day).timestamp(),
@@ -686,6 +691,7 @@ class Video:
 		speaker_turns = list(speaker_turn_data.iter())
 
 		return {
+			"filename": meta["filename"],
 			"channel": meta["channel"],
 			"title": meta["title"],
 			"publishedAt": meta["publishedAt"],
