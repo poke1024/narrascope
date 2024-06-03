@@ -1,0 +1,196 @@
+enum ShotScale
+	= EXTREME_CLOSE_UP
+	| CLOSE_UP
+	| MEDIUM_SHOT
+	| FULL_SHOT
+	| LONG_SHOT
+
+enum ShotAngle
+	= DUTCH
+	| HIGH
+	| LOW
+	| NEUTRAL
+	| OVERHEAD
+
+enum ShotLevel
+	= AERIAL
+	| EYE
+	| GROUND
+	| HIP
+	| KNEE
+	| SHOULDER
+
+enum ShotMovement
+	= STATIC
+	| MOTION
+	| PULL
+	| PUSH
+
+enum Gender
+	= MALE
+	| FEMALE
+	| UNKNOWN_GENDER
+
+enum Sentiment
+	= NEGATIVE_SENTIMENT
+	| NEUTRAL_SENTIMENT
+	| POSITIVE_SENTIMENT
+
+type Fuzzy a = {
+	name: a,
+	p: Float  # [0, 1]
+}
+
+type WordClassFreq = {
+	verb: Float,
+	propn: Float,
+	pron: Float,
+	part: Float,
+	num: Float,
+	noun: Float,
+	intj: Float,
+	det: Float,
+	conj: Float,
+	aux: Float,
+	adv: Float,
+	adp: Float,
+	adj: Float
+}
+
+type Emotion = {
+	top: String,
+	all: List Fuzzy String
+}
+
+type SpeakerTurn = {
+	id: String,
+	startTime: Float,  # seconds
+	endTime: Float,    # seconds
+	numWords: Int,
+	words: WordClassFreq,
+	tags: List Fuzzy String,
+	sentiment: List Fuzzy Sentiment,
+	gender: Gender,
+	emotion: Emotion
+}
+
+type HeadPose = {
+	pitch: Float,  # degrees
+	roll: Float,   # degrees
+	yaw: Float     # degrees
+}
+
+type HeadGaze = {
+	h: Float,	   # degrees, horizontal
+	v: Float       # degrees, vertical
+}
+
+type Region = {
+	center: Float,  # [0, 100]
+	left: Float,    # [0, 100]
+	right: Float    # [0, 100]
+}
+
+type Face = {
+	id: String,
+	actor: Bool,
+	stime: Float,      # screen time in the shot [0, 100]
+	head: HeadPose,
+	gaze: HeadGaze,
+	emotion: Emotion,
+	region: Region
+}
+
+type ImageSimilarityClassifierOutputs = {
+	siglip: Float,
+	convnextv2: Float,
+	places: Float
+}
+
+type ActionSimilarityClassifierOutputs = {
+	kinetics-vmae: Float,
+	ssv2-vmae: Float,
+	kinetics-xclip: Float
+}
+
+type AudioSimilarityClassifierOutputs = {
+	wav2vec2: Float,
+	beats: Float,
+	whisper: Float
+}
+
+type ShotSimilarity = {
+	image: ImageSimilarityClassifierOutputs,
+	action: ActionSimilarityClassifierOutputs,
+	audio: AudioSimilarityClassifierOutputs
+}
+
+type Shot = {
+	startTime: Float,  # seconds
+	endTime: Float,    # seconds
+	scale: ShotScale,
+	angle: ShotAngle,
+	level: ShotLevel,
+	movement: ShotMovement,
+	faces: List Face,
+	tags: List Fuzzy String,
+	next: ShotSimilarity
+}
+
+type Video = {
+	channel: String,
+	filename: String,
+	title: String,
+	publishedAt: Int,
+	videoId: String,
+	shots: List Shot,
+	speakerTurns: List SpeakerTurn
+}
+
+type Corpus = {
+	version: String,
+	videos: List Video
+}
+
+# utility functions
+
+def top(xs):
+	match max(xs, .p):
+		case Just x: x.name
+		else: ""
+
+def top(xs: List Fuzzy Sentiment):
+	match max(xs, .p):
+		case Just x: x.name
+		else: NEUTRAL
+
+def level(xs: List Fuzzy String, name: String):
+  sum(for x in xs:
+    if x.name == name:
+      x.p
+    else:
+      0.
+    )
+
+# definition of "same" and "different"
+
+enum Relation
+	= SAME
+	| DIFFERENT
+	| UNDEFINED
+
+# https://en.wikipedia.org/wiki/Jaccard_index
+def jaccard(x, y):
+	len(intersection(x, y)) / len(union(x, y))
+
+def actor_relation(x, y):
+	match jaccard(x.id, y.id):
+		case 1: SAME
+		case 0: DIFFERENT
+		else: UNDEFINED
+
+def region_relation(ra, rb):
+	if abs(ra.center - rb.center) + abs(ra.left - rb.left) + abs(ra.right - rb.right) < 10:
+		SAME
+	else:
+		DIFFERENT

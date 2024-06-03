@@ -424,27 +424,28 @@ class SpeakerSegmentClfData:
 		return weighted_mode(self.tree, t0, t1, "gender_pred", "UNKNOWN_GENDER").upper()
 
 
-def load_stability_data(path, method, feature):
-	with open(path / f"{method}_shot_similarity.pkl", "rb") as f:
+def load_sim_data(path, method, feature, suffix, value):
+	full_path = path / f"{method}{suffix}.pkl"
+
+	with open(full_path, "rb") as f:
 		data = pickle.load(f)
 
-	if method in ["vitB", "siglip", "places"]:
-		f = lambda x: x[1]  # median
-	else:
-		f = lambda x: x
-	
-	r = dict()
-	for x in data["output_data"]:
-		t0 = x["shot"]["start"]
-		t1 = x["shot"]["end"]
-		r[(t0, t1)] = round(float(f(x[feature])), 2)
+	try:
+		r = dict()
+		for x in data["output_data"]:
+			t0 = x["shot"]["start"]
+			t1 = x["shot"]["end"]
+			r[(t0, t1)] = round(float(value(x[feature])), 2)
+	except:
+		raise RuntimeError(f"failed to parse {full_path}")
+
 	return r
 
 
-class ShotStabilityData:
-	def __init__(self, path, feature):
-		methods = ["xclip", "videomae", "vitB", "siglip", "places"]
-		self.data = dict((k, load_stability_data(path, k, feature)) for k in methods)
+class ShotSimData:
+	def __init__(self, path, feature, methods, suffix, value):
+		self.data = dict((k, load_sim_data(
+			path, k, feature, suffix, value)) for k in methods)
 	
 	def query(self, t0, t1):
 		return dict((k.lower(), v[(t0, t1)]) for k, v in self.data.items())
@@ -526,8 +527,36 @@ class ShotData:
 		shot_level_data = ShotLevelData(self.path)
 		scale_movement_data = ShotScaleMovementData(self.path)
 
-		shot_sim_1 = ShotStabilityData(self.path, "next_1")
-		shot_sim_2 = ShotStabilityData(self.path, "next_2")
+		shot_sim = {
+			"image": {
+				"methods": ["siglip", "convnextv2", "places"],
+				"suffix": "_shot_similarity",
+				"value": lambda x: x[1]  # median
+			},
+			"action": {
+				"methods": ["kinetics-vmae", "ssv2-vmae", "kinetics-xclip"],
+				"suffix": "_action_shot_similarity",
+				"value": lambda x: x
+			},
+			"audio": {
+				"methods": ["wav2vec2", "beats", "whisper"],
+				"suffix": "_audio_shot_similarity",
+				"value": lambda x: x
+			}
+		}
+
+		shot_sim_data = dict()
+		for domain, args in shot_sim.items():
+			r = dict()
+			for scope in ["next_1", "next_2"]:
+				r[scope] = ShotSimData(self.path, scope, **args)
+			shot_sim_data[domain] = r
+
+		def query_sim(t0, t1):
+			r = dict()
+			for domain, scopes in shot_sim_data.items():
+				r[domain] = scopes["next_1"].query(t0, t1)
+			return r
 		
 		for shot_rec in self.shot_detection_data["output_data"]["shots"]:
 			t0 = float(shot_rec["start"])
@@ -542,10 +571,7 @@ class ShotData:
 				"movement": scale_movement_data.movement(t0, t1),
 				"faces": list(face_data.query(t0, t1)),
 				"tags": speaker_audio_clf.query(t0, t1),
-				"experimental": {
-					"similarityNext1": shot_sim_1.query(t0, t1),
-					"similarityNext2": shot_sim_2.query(t0, t1)
-				}
+				"next": query_sim(t0, t1)
 			}
 			
 
@@ -718,8 +744,8 @@ def tib2nar(pkl, out):
 		corpus.export(out)
 	except:
 		traceback.print_exc()
-	
-	print(f"successfully exported {out}")
+	else:
+		print(f"successfully exported {out}")
 
 
 if __name__ == '__main__':
