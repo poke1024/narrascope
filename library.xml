@@ -31,10 +31,11 @@ where actor_relation(f1, f3) == SAME and actor_relation(f1, f2) == DIFFERENT
             <name>intensification</name>
             <pattern>
                 <name>2 shots</name>
+                <comment>Hannover Technical Feature A, Unknown Thresholds</comment>
                 <code><![CDATA[
 match [
 # shot 1: some person "a", scale s1
-{faces = [{id = a}], scale = s1, experimental = {similarityNext1 = {places > 0.2}}},
+{faces = [{id = a}], scale = s1, next = {image = {siglip > 0.2}}},
 # shot 2: same person "a", smaller scale
 {faces = [{id = a}], scale < s1}
 ] from shots
@@ -98,6 +99,66 @@ match [
 where a != b and region_relation(ra, rb) == DIFFERENT
 				]]></code>
             </pattern>
+        </subsection>
+        <subsection>
+            <name>enhancement</name>
+
+            <pattern>
+                <name>thematics enhancement</name>
+                <comment>Hannover Technical Feature A, Unknown Thresholds</comment>
+                <code><![CDATA[
+match [s1, s2, {}]
+from shots
+where s1.next.action.kineticsvmae > 0.95 and s2.next.action.kineticsvmae > 0.95
+                ]]></code>
+            </pattern>
+            <pattern>
+                <name>thematics enhancement</name>
+                <comment>Hannover Technical Feature B, Unknown Thresholds</comment>
+                <code><![CDATA[
+match [s1, s2, {}]
+from shots
+where s1.next.action.ssv2vmae > 0.95 and s2.next.action.ssv2vmae > 0.95
+                ]]></code>
+            </pattern>
+            <pattern>
+                <name>thematics enhancement</name>
+                <comment>Hannover Technical Feature C, Unknown Thresholds</comment>
+                <code><![CDATA[
+match [s1, s2, {}]
+from shots
+where s1.next.action.kineticsxclip > 0.95 and s2.next.action.kineticsxclip > 0.95
+                ]]></code>
+            </pattern>
+
+            <pattern>
+                <name>ambience enhancement</name>
+                <comment>Hannover Technical Feature A, Unknown Thresholds</comment>
+                <code><![CDATA[
+match [s1, s2, {}]
+from shots
+where s1.next.audio.wav2vec2 > 0.95 and s2.next.audio.wav2vec2 > 0.95
+                ]]></code>
+            </pattern>
+            <pattern>
+                <name>ambience enhancement</name>
+                <comment>Hannover Technical Feature B, Unknown Thresholds</comment>
+                <code><![CDATA[
+match [s1, s2, {}]
+from shots
+where s1.next.audio.beats > 0.95 and s2.next.audio.beats > 0.95
+                ]]></code>
+            </pattern>
+            <pattern>
+                <name>ambience enhancement</name>
+                <comment>Hannover Technical Feature C, Unknown Thresholds</comment>
+                <code><![CDATA[
+match [s1, s2, {}]
+from shots
+where s1.next.audio.whisper > 0.95 and s2.next.audio.whisper > 0.95
+                ]]></code>
+            </pattern>
+
         </subsection>
     </section>
     <section>
