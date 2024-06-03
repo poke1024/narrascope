@@ -108,9 +108,9 @@ type ImageSimilarityClassifierOutputs = {
 }
 
 type ActionSimilarityClassifierOutputs = {
-	kinetics-vmae: Float,
-	ssv2-vmae: Float,
-	kinetics-xclip: Float
+	kineticsvmae: Float,
+	ssv2vmae: Float,
+	kineticsxclip: Float
 }
 
 type AudioSimilarityClassifierOutputs = {

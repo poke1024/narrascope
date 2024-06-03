@@ -448,7 +448,9 @@ class ShotSimData:
 			path, k, feature, suffix, value)) for k in methods)
 	
 	def query(self, t0, t1):
-		return dict((k.lower(), v[(t0, t1)]) for k, v in self.data.items())
+		return dict(
+			(k.lower().replace("-", ""), v[(t0, t1)])
+			for k, v in self.data.items())
 
 
 def mode(xs):
