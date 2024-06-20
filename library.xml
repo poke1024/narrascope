@@ -5,51 +5,78 @@
             <name>cuts</name>
             <pattern>
                 <name>cut-in</name>
+                <comment>object relation is missing</comment>
                 <code><![CDATA[
 match [
-{faces = f1, scale = s1},
-{faces = f2, scale < s1},
-{faces = f3}]
+{actors = a1, scale = head_s},
+{scale < head_s}+,
+{actors = a2}]
 from shots
-where actor_relation(f1, f3) == SAME and actor_relation(f1, f2) == DIFFERENT
-				]]></code>
+where len(intersection(a1.id, a2.id)) >= 1
+                ]]></code>
             </pattern>
             <pattern>
-                <name>cut-away</name>
+                <name>cut-away to people</name>
                 <code><![CDATA[
 match [
-{faces = f1, scale = s1},
-{faces = f2, scale > s1},
-{faces = f3}]
+{actors = a1},
+{actors = a2},
+{actors = a3}]
 from shots
-where actor_relation(f1, f3) == SAME and actor_relation(f1, f2) == DIFFERENT
-				]]></code>
-
+where len(intersection(a1.id, a3.id)) >= 1 and len(intersection(a1.id, a2.id)) == 0 and len(a2) >= 2
+                ]]></code>
+            </pattern>
+            <pattern>
+                <name>cut-away to objects</name>
+                <code><![CDATA[
+match [
+{actors = a1},
+{faces = []}+,
+{actors = a2}]
+from shots
+where len(intersection(a1.id, a2.id)) >= 1
+                ]]></code>
             </pattern>
         </subsection>
         <subsection>
             <name>intensification</name>
             <pattern>
-                <name>2 shots</name>
-                <comment>Hannover Technical Feature A, Unknown Thresholds</comment>
+                <name>same face</name>
                 <code><![CDATA[
 match [
-# shot 1: some person "a", scale s1
-{faces = [{id = a}], scale = s1, next = {image = {siglip > 0.2}}},
-# shot 2: same person "a", smaller scale
-{faces = [{id = a}], scale < s1}
-] from shots
-				]]></code>
+{actors = a1s},
+{actors = a2s}]
+from shots
+where any(lambda pair: match pair:
+    case Rule actor_id [a1, a2]:
+      a2.size / a1.size > 1.05
+    case _:
+      False
+  , groupBy(lambda a: a.id, a1s + a2s))
+                ]]></code>
             </pattern>
             <pattern>
-                <name>3 shots</name>
+                <name>multiple faces</name>
                 <code><![CDATA[
-match [
-{faces = [{id = a}], scale = s1},
-{faces = [{id = a}], scale < s1, scale = s2},
-{faces = [{id = a}], scale < s2}
-] from shots
-				]]></code>
+def smedian(x):
+  match median(for xx in x: if xx < 0.1: xx):
+    case Just y: y
+    case Nothing: 0.
+
+match [{faces = a1}, {faces = a2}, {faces = a3}]
+from shots
+where (
+    smedian(a2.size) / smedian(a1.size) > 1.05 and
+    smedian(a3.size) / smedian(a2.size) > 1.05 and
+    len(a1) >= 2 and len(a2) >= 2
+)
+                ]]></code>
+            </pattern>
+            <pattern>
+                <name>object</name>
+                <code><![CDATA[
+                    # missing object relation
+                ]]></code>
             </pattern>
         </subsection>
         <subsection>
@@ -61,11 +88,11 @@ match [
 {faces = [{id = b, gaze = g2}]},
 {faces = [{id = a, gaze = g3}]}
 ] from shots where a != b and all(lambda g: abs(g.h) > 2.5, [g1, g2, g3])
-				]]></code>
+                ]]></code>
             </pattern>
         </subsection>
         <subsection>
-            <name>POV</name>        	
+            <name>POV</name>            
             <pattern>
                 <code><![CDATA[
 match [
@@ -74,7 +101,7 @@ match [
 {faces = f3, scale < MEDIUM_SHOT}]
 from shots
 where actor_relation(f1, f3) == SAME and actor_relation(f1, f2) == DIFFERENT
-				]]></code>
+                ]]></code>
             </pattern>
         </subsection>
         <subsection>
@@ -87,7 +114,7 @@ match [
 {faces = [{id = b, region = rb, actor = True}]}
 ] from shots
 where a != b and region_relation(ra, rb) == SAME
-				]]></code>
+                ]]></code>
             </pattern>
             <pattern>
                 <name>opposition</name>
@@ -97,7 +124,7 @@ match [
 {faces = [{id = b, region = rb, actor = True}]}
 ] from shots
 where a != b and region_relation(ra, rb) == DIFFERENT
-				]]></code>
+                ]]></code>
             </pattern>
         </subsection>
         <subsection>
@@ -172,7 +199,7 @@ match [
 {faces = [{id = a}], scale <= MEDIUM_SHOT}
 ] from shots join speakerTurns as st
 where max(st1.words.propn) > 0
-					]]></code>
+                    ]]></code>
                 </pattern>
         </subsection>
         <subsection>
@@ -184,7 +211,7 @@ match [
 {faces=[{emotion={top=a}}]},
 {faces=[{emotion={top=a}}]}
 ] from shots where a != "unknown" and a != "neutral"
-				]]></code>
+                ]]></code>
             </pattern>
             <pattern>
                 <name>based on speaker emotion</name>
@@ -193,7 +220,7 @@ match [
 {emotion={top=a}},
 {emotion={top=a}}
 ] from speakerTurns where a != "unknown" and a != "neutral"
-				]]></code>
+                ]]></code>
             </pattern>
         </subsection>
     </section>

@@ -17,7 +17,7 @@ from functools import reduce
 from intervaltree import Interval, IntervalTree
 
 
-SCHEMA_VERSION = "2024-05-24"
+SCHEMA_VERSION = "2024-06-20"
 
 
 class Video:
@@ -129,6 +129,10 @@ class Box:
 
 	def __repr__(self):
 		return f"Box({self.p0}, {self.p1})"
+
+
+def face_size(xs):
+	return np.median([x["bbox"]["h"] for x in xs])
 
 
 def is_actor(xs):
@@ -250,10 +254,8 @@ class FaceData:
 			
 			yield {
 				"id": str(k),
-				"emotion": {
-					"top": top_of_p_list(emotions),
-					"all": emotions
-				},
+				"size": face_size(xs),
+				"emotion": top_of_p_list(emotions),
 				"head": dict((k, int(v)) for k, v in zip(
 					self.headpose_keys,
 					np.mean([x["headpose"] for x in xs], axis=0))),
@@ -353,15 +355,6 @@ class SpeakerWordClassData:
 		with open(path / "whisper_pos.pkl", "rb") as f:
 			data = pickle.load(f)
 
-		self.tree = make_interval_tree([
-			Interval(d["start"], d["end"], d)
-			for d in data["output_data"]["speakerturn_wise"]])
-
-		self.label_map = dict((k, "_".join(sorted([x[1] for x in v]))) for k, v in groupby(sorted([
-			(v, k) for k, v in data["output_data"]["pos_labelmap"].items()], key=lambda x: x[0]), key=lambda x: x[0]))
-
-		self.p_list = p_list([self.label_map[i] for i in range(len(self.label_map))], 0.05)
-
 		self.tags = [
 			"verb",
 			"propn",
@@ -378,15 +371,30 @@ class SpeakerWordClassData:
 			"adj"
 		]
 
+		tag2i = dict((k, i) for i, k in enumerate(self.tags))
+
+		def counts_vector(d):
+			v = np.zeros((len(self.tags),), dtype=np.int32)
+			for x in (d.get("tags") or []):
+				index = tag2i.get(x[1].lower())
+				if index is not None:
+					v[index] += 1
+			return v
+
+		self.tree = make_interval_tree([
+			Interval(d["start"], d["end"], counts_vector(d))
+			for d in data["output_data"]["speakerturn_wise"]])
+
+
 	def query(self, t0, t1):
-		y = weighted_prob(self.tree, t0, t1, "vector")
-		y_sum = np.sum(y)
-		if y_sum > 0:
-			y /= y_sum
-		data = dict((x["name"], x["p"]) for x in self.p_list(y))
-		return dict(
-			(k, data.get(k, 0)) for k in self.tags
-		)
+		ys = []
+		for iv in self.tree.overlap(t0, t1):
+			ys.append(iv.data)
+
+		if len(ys) > 0:
+			return dict(zip(self.tags, np.sum(ys, axis=0).tolist()))
+		else:
+			return dict(zip(self.tags, [0] * len(self.tags)))			
 
 
 class SpeakerAudioClfData:
@@ -514,6 +522,71 @@ class ShotScaleMovementData:
 		return self._movement[(t0, t1)]
 
 
+class InstructBLIPData:
+	def __init__(self, path, kind, renames=None):
+		with open(path / f"instructblip_{kind}.pkl", "rb") as f:
+			data = pickle.load(f)
+
+		dt = data["delta_time"]
+		ts = np.array(data["time"])
+		ys = data["responses"].T
+
+		self.tree = IntervalTree([
+			Interval(t, t + dt, y)
+			for t, y in zip(ts, ys)
+		])
+
+		self.labels = data["labels"]
+
+		if renames:
+			self.labels = [renames.get(x, x) for x in self.labels]
+
+	def query(self, t0, t1):
+		ys = [iv.data for iv in self.tree.overlap(t0, t1)]
+		if len(ys) == 0:
+			return dict(zip(self.labels, [0] * len(self.labels)))
+		else:
+			mean_y = np.mean(ys, axis=0)
+			return dict(zip(self.labels, mean_y))
+
+
+class EntitiesData:
+	def __init__(self, path):
+		with open(path / f"whisperx_ner.pkl", "rb") as f:
+			data = pickle.load(f)
+
+		self.tree = IntervalTree()
+
+		self.labels = [x.lower() for x in data["output_data"]["ner_labelmap"].keys()]
+		ivs = []
+
+		for record in data["output_data"]["speakerturn_wise"]:
+			t0 = record["start"]
+			t1 = record["end"]
+			t1 = max(t1, t0 + 0.01)  # prevent null intervals
+
+			counts = collections.Counter(dict(zip(
+				self.labels, [0] * len(self.labels))))
+			for tag in (record.get("tags") or []):
+				counts[tag["type"].lower()] += 1
+
+			ivs.append(Interval(t0, t1, np.array(
+				[counts[k] for k in self.labels], dtype=np.int32)))
+
+		self.tree = IntervalTree(ivs)
+
+	def query(self, t0, t1):
+		ys = []
+
+		for iv in self.tree.overlap(t0, t1):
+			ys.append(iv.data)
+
+		if len(ys) > 0:
+			return dict(zip(self.labels, np.sum(ys, axis=0).tolist()))
+		else:
+			return dict(zip(self.labels, [0] * len(self.labels)))
+
+
 class ShotData:
 	def __init__(self, path):
 		with open(path / "transnet_shotdetection.pkl", "rb") as f:
@@ -528,6 +601,10 @@ class ShotData:
 		shot_angle_data = ShotAngleData(self.path)
 		shot_level_data = ShotLevelData(self.path)
 		scale_movement_data = ShotScaleMovementData(self.path)
+		place_data = InstructBLIPData(self.path, "environment", renames={
+			"news studio": "studio"
+		})
+		roles_data = InstructBLIPData(self.path, "news_roles")
 
 		shot_sim = {
 			"image": {
@@ -573,7 +650,9 @@ class ShotData:
 				"movement": scale_movement_data.movement(t0, t1),
 				"faces": list(face_data.query(t0, t1)),
 				"tags": speaker_audio_clf.query(t0, t1),
-				"next": query_sim(t0, t1)
+				"next": query_sim(t0, t1),
+				"place": place_data.query(t0, t1),
+				"roles": roles_data.query(t0, t1)
 			}
 			
 
@@ -592,6 +671,7 @@ class SpeakerTurnData:
 		speaker_word_class = SpeakerWordClassData(self.path)
 		speaker_audio_clf = SpeakerAudioClfData(self.path)
 		speaker_segment_clf = SpeakerSegmentClfData(self.path)
+		ent_data = EntitiesData(self.path)
 		
 
 		for turn in self.turns:
@@ -604,13 +684,11 @@ class SpeakerTurnData:
 				"endTime": t1,
 				"numWords": len(turn["words"]),
 				"words": speaker_word_class.query(t0, t1),
+				"entities": ent_data.query(t0, t1),
 				"sentiment": speaker_sentiment.query(t0, t1),
 				"tags": speaker_audio_clf.query(t0, t1),
 				"gender": speaker_segment_clf.gender(t0, t1),
-				"emotion": {
-					"top": top_of_p_list(emotions),
-					"all": emotions
-				}
+				"emotion": top_of_p_list(emotions)
 			}
 
 

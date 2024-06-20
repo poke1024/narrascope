@@ -1,0 +1,95 @@
+def pp_face(face: ImportedFace) -> Face:
+	{
+		id = face.id,
+		size = face.size,
+		stime = face.stime,
+		head = face.head,
+		gaze = face.gaze,
+		emotion = face.emotion,
+		region = face.region
+	}
+
+def pp_shot(shot: ImportedShot) -> Shot:
+	{
+		startTime = shot.startTime,
+		endTime = shot.endTime,
+		scale = shot.scale,
+		angle = shot.angle,
+		level = shot.level,
+		movement = shot.movement,
+		faces = map(pp_face, shot.faces),
+		actors = map(pp_face, filter(lambda x: x.actor, shot.faces)),
+		tags = shot.tags,
+		next = shot.next,
+		place = shot.place,
+		roles = shot.roles
+	}
+
+def pp_video(video: ImportedVideo) -> Video:
+	{
+		channel = video.channel,
+		filename = video.filename,
+		title = video.title,
+		publishedAt = video.publishedAt,
+		videoId = video.videoId,
+		shots = map(pp_shot, video.shots),
+		speakerTurns = video.speakerTurns
+	}
+
+def pp_corpus(corpus: ImportedCorpus) -> Corpus:
+	{
+		version = corpus.version,
+		videos = map(pp_video, corpus.videos)
+	}
+
+# utility functions
+
+def top(xs):
+	match max(xs, .p):
+		case Just x: x.name
+		else: ""
+
+def top(xs: List Fuzzy Sentiment):
+	match max(xs, .p):
+		case Just x: x.name
+		else: NEUTRAL
+
+def level(xs: List Fuzzy String, name: String):
+  sum(for x in xs:
+    if x.name == name:
+      x.p
+    else:
+      0.
+    )
+
+def pairs(xs):
+	zip(xs, drop(1, xs))
+
+def ratios(xs: List Float):
+	for x in pairs(xs):
+		match x:
+			case [a, b]:
+				a / b
+
+# preliminary definition of "same" and "different"
+
+enum Relation
+	= SAME
+	| DIFFERENT
+	| UNDEFINED
+
+# https://en.wikipedia.org/wiki/Jaccard_index
+def jaccard(x, y):
+	len(intersection(x, y)) / len(union(x, y))
+
+def actor_relation(x, y):
+	match jaccard(x.id, y.id):
+		case 1: SAME
+		case 0: DIFFERENT
+		else: UNDEFINED
+
+def region_relation(ra, rb):
+	if abs(ra.center - rb.center) + abs(ra.left - rb.left) + abs(ra.right - rb.right) < 10:
+		SAME
+	else:
+		DIFFERENT

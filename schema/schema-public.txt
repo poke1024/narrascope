@@ -1,0 +1,180 @@
+enum ShotScale
+	= EXTREME_CLOSE_UP
+	| CLOSE_UP
+	| MEDIUM_SHOT
+	| FULL_SHOT
+	| LONG_SHOT
+
+enum ShotAngle
+	= DUTCH
+	| HIGH
+	| LOW
+	| NEUTRAL
+	| OVERHEAD
+
+enum ShotLevel
+	= AERIAL
+	| EYE
+	| GROUND
+	| HIP
+	| KNEE
+	| SHOULDER
+
+enum ShotMovement
+	= STATIC
+	| MOTION
+	| PULL
+	| PUSH
+
+enum Gender
+	= MALE
+	| FEMALE
+	| UNKNOWN_GENDER
+
+enum Sentiment
+	= NEGATIVE_SENTIMENT
+	| NEUTRAL_SENTIMENT
+	| POSITIVE_SENTIMENT
+
+type Fuzzy a = {
+	name: a,
+	p: Float  # [0, 1]
+}
+
+type Words = {
+	verb: Int,
+	propn: Int,
+	pron: Int,
+	part: Int,
+	num: Int,
+	noun: Int,
+	intj: Int,
+	det: Int,
+	conj: Int,
+	aux: Int,
+	adv: Int,
+	adp: Int,
+	adj: Int
+}
+
+type Entities = {
+	eper: Int,
+	lper: Int,
+	loc: Int,
+	org: Int,
+	event: Int,
+	misc: Int
+}
+
+type SpeakerTurn = {
+	id: String,
+	startTime: Float,  # seconds
+	endTime: Float,    # seconds
+	numWords: Int,
+	words: Words,
+	entities: Entities,
+	tags: List Fuzzy String,
+	sentiment: List Fuzzy Sentiment,
+	gender: Gender,
+	emotion: String
+}
+
+type HeadPose = {
+	pitch: Float,  # degrees
+	roll: Float,   # degrees
+	yaw: Float     # degrees
+}
+
+type HeadGaze = {
+	h: Float,	   # degrees, horizontal
+	v: Float       # degrees, vertical
+}
+
+type Region = {
+	center: Float,  # [0, 100]
+	left: Float,    # [0, 100]
+	right: Float    # [0, 100]
+}
+
+type Face = {
+	id: String,
+	size: Float,
+	stime: Float,      # screen time in the shot [0, 100]
+	head: HeadPose,
+	gaze: HeadGaze,
+	emotion: String,
+	region: Region
+}
+
+type ImageSimilarityClassifierOutputs = {
+	siglip: Float,
+	convnextv2: Float,
+	places: Float
+}
+
+type ActionSimilarityClassifierOutputs = {
+	kineticsvmae: Float,
+	ssv2vmae: Float,
+	kineticsxclip: Float
+}
+
+type AudioSimilarityClassifierOutputs = {
+	wav2vec2: Float,
+	beats: Float,
+	whisper: Float
+}
+
+type ShotSimilarity = {
+	image: ImageSimilarityClassifierOutputs,
+	action: ActionSimilarityClassifierOutputs,
+	audio: AudioSimilarityClassifierOutputs
+}
+
+type Place = {
+	indoor: Float,
+	rural: Float,
+	industrial: Float,
+	urban: Float,
+	suburban: Float,
+	studio: Float
+}
+
+type Roles = {
+	protester: Float,
+	anchor: Float,
+	reporter: Float,
+	politician: Float,
+	doctor: Float,
+	layperson: Float
+}
+
+type Shot = {
+	startTime: Float,  # seconds
+	endTime: Float,    # seconds
+	scale: ShotScale,
+	angle: ShotAngle,
+	level: ShotLevel,
+	movement: ShotMovement,
+	faces: List Face,
+	actors: List Face,
+	tags: List Fuzzy String,
+	next: ShotSimilarity,
+	place: Place,
+	roles: Roles
+}
+
+type Video = {
+	channel: String,
+	filename: String,
+	title: String,
+	publishedAt: Int,
+	videoId: String,
+	shots: List Shot,
+	speakerTurns: List SpeakerTurn
+}
+
+type Corpus = {
+	version: String,
+	videos: List Video
+}
+
