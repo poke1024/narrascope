@@ -44,6 +44,11 @@ def pp_corpus(corpus: ImportedCorpus) -> Corpus:
 
 # utility functions
 
+def median_or_0(x):
+  match median(x):
+    case Just y: y
+    case Nothing: 0.
+
 def top(xs):
 	match max(xs, .p):
 		case Just x: x.name
@@ -66,25 +71,8 @@ def ratios(xs: List Float):
 			case [a, b]:
 				a / b
 
-# preliminary definition of "same" and "different"
+def is_indirect_gaze(g):
+  abs(g.h) > 2.5
 
-enum Relation
-	= SAME
-	| DIFFERENT
-	| UNDEFINED
-
-# https://en.wikipedia.org/wiki/Jaccard_index
-def jaccard(x, y):
-	len(intersection(x, y)) / len(union(x, y))
-
-def actor_relation(x, y):
-	match jaccard(x.id, y.id):
-		case 1: SAME
-		case 0: DIFFERENT
-		else: UNDEFINED
-
-def region_relation(ra, rb):
-	if abs(ra.center - rb.center) + abs(ra.left - rb.left) + abs(ra.right - rb.right) < 10:
-		SAME
-	else:
-		DIFFERENT
+def is_same_place(next):
+  next.image.siglip > 0.25

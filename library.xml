@@ -2,54 +2,58 @@
     <section>
         <name>FEPs</name>
         <subsection>
-            <name>cuts</name>
+            <name>cut-in</name>
             <pattern>
-                <name>cut-in</name>
-                <comment>object relation is missing</comment>
-                <code><![CDATA[
+´               <code><![CDATA[
 match [
-{actors = a1, scale = head_s},
-{scale < head_s}+,
-{actors = a2}]
+    {actors = a1, scale = s1},
+    {scale < s1}+,  # s1, s2 / size relation / closer
+    {actors = a2}]
 from shots
-where len(intersection(a1.id, a2.id)) >= 1
-                ]]></code>
-            </pattern>
-            <pattern>
-                <name>cut-away to people</name>
-                <code><![CDATA[
-match [
-{actors = a1},
-{actors = a2},
-{actors = a3}]
-from shots
-where len(intersection(a1.id, a3.id)) >= 1 and len(intersection(a1.id, a2.id)) == 0 and len(a2) >= 2
-                ]]></code>
-            </pattern>
-            <pattern>
-                <name>cut-away to objects</name>
-                <code><![CDATA[
-match [
-{actors = a1},
-{faces = []}+,
-{actors = a2}]
-from shots
-where len(intersection(a1.id, a2.id)) >= 1
+where len(intersection(a1.id, a2.id)) >= 1 # s1, s3 / actor relation / same
                 ]]></code>
             </pattern>
         </subsection>
         <subsection>
-            <name>intensification</name>
+            <name>cut-away</name>
+            <pattern>
+                <name>to people</name>
+                <code><![CDATA[
+match [
+    {actors = a1},
+    {actors = a2},
+    {actors = a3}]
+from shots
+where (
+  len(intersection(a1.id, a3.id)) >= 1 and  # s1, s3 / actor relation / same
+  len(intersection(a1.id, a2.id)) == 0 and  # s1, s2 / actor relation / different
+  len(a2) >= 2  # s2 / num faces / >= 2)                
+                ]]></code>
+            </pattern>
+            <pattern>
+                <name>to objects</name>
+                <code><![CDATA[
+match [
+    {actors = a1},
+    {actors = []}+,  # s2 / actor-count / 0
+    {actors = a3}]
+from shots
+where len(intersection(a1.id, a3.id)) >= 1  # # s1, s3 / actor relation / same
+                ]]></code>
+            </pattern>
+        </subsection>
+        <subsection>
+            <name>intensify</name>
             <pattern>
                 <name>same face</name>
                 <code><![CDATA[
 match [
-{actors = a1s},
-{actors = a2s}]
+    {actors = a1s},
+    {actors = a2s}]
 from shots
 where any(lambda pair: match pair:
     case Rule actor_id [a1, a2]:
-      a2.size / a1.size > 1.05
+      a2.size / a1.size > 1.05  # s1, s2 / actor relation, face size / same and bigger
     case _:
       False
   , groupBy(lambda a: a.id, a1s + a2s))
@@ -58,47 +62,222 @@ where any(lambda pair: match pair:
             <pattern>
                 <name>multiple faces</name>
                 <code><![CDATA[
-def smedian(x):
-  match median(for xx in x: if xx < 0.1: xx):
-    case Just y: y
-    case Nothing: 0.
-
-match [{faces = a1}, {faces = a2}, {faces = a3}]
+match [
+    {faces = a1, scale = s1},
+    {faces = a2, scale < s1, scale = s2},  # s1, s2 / shot scale / closer
+    {faces = a3, scale < s2}]  # s1, s2 / shot scale / closer
 from shots
 where (
-    smedian(a2.size) / smedian(a1.size) > 1.05 and
-    smedian(a3.size) / smedian(a2.size) > 1.05 and
-    len(a1) >= 2 and len(a2) >= 2
+    median_or_0(a2.size) / median_or_0(a1.size) > 1.05 and  # s1, s2 / face size / median face size
+    median_or_0(a3.size) / median_or_0(a2.size) > 1.05 and  # s2, s3 / face size / median face size
+    len(a1) >= 3  # seg1 / face count / >= 3
 )
-                ]]></code>
-            </pattern>
-            <pattern>
-                <name>object</name>
-                <code><![CDATA[
-                    # missing object relation
                 ]]></code>
             </pattern>
         </subsection>
         <subsection>
-            <name>shot/reverse shot</name>
+            <name>shot reverse shot</name>
             <pattern>
                 <code><![CDATA[
 match [
-{faces = [{id = a, gaze = g1}]},
-{faces = [{id = b, gaze = g2}]},
-{faces = [{id = a, gaze = g3}]}
-] from shots where a != b and all(lambda g: abs(g.h) > 2.5, [g1, g2, g3])
+    {actors = a1},
+    {actors = a2},
+    {actors = a3}]
+from shots
+where (
+  len(intersection(a1.id, a2.id)) == 0 and  # s1, s2 / actor relation / different
+  len(intersection(a1.id, a3.id)) > 0 and # s1, s3 / actor relation / same
+  all(is_indirect_gaze, flatten([a1.gaze, a2.gaze, a3.gaze]))  and  # gaze / non-direct
+  len(a1) == 1 and len(a2) == 1 and len(a3) == 1  # s1, s2, s3 / actor count / 1
+)                
                 ]]></code>
             </pattern>
         </subsection>
+
+        <subsection>
+            <name>alternating shots</name>
+            <pattern>
+                <code><![CDATA[
+match [
+    {actors = a1, scale = s1},
+    {actors = a2, scale = s2},
+    {actors = a3, scale = s1},  # s1, s3 / shot size / same
+    {actors = a4, scale = s2}]  # s2, s4 / shot size / same
+from shots
+where (
+  len(intersection(a1.id, a3.id)) > 0 and  # s1, s3 / actor relation / same
+  len(intersection(a2.id, a4.id)) > 0  # s2, s4 / actor relation / same  
+)
+                ]]></code>
+            </pattern>
+        </subsection>
+
+        <subsection>
+            <name>continuity</name>
+            <pattern>
+                <name>talk / dialogue</name>
+                <code><![CDATA[
+match [2... of {st = [{id = a}]}]
+from shots join speakerTurns as st
+                ]]></code>
+            </pattern>
+            <pattern>
+                <name>spatial</name>
+                <code><![CDATA[
+# siglip is a technical image similarity value
+match [2... of {next = {image = {siglip > 0.25}}}]
+from shots
+                ]]></code>
+            </pattern>
+            <pattern>
+                <name>actors</name>
+                <code><![CDATA[
+match [2... of {} = s]
+from shots
+where (map(set, s.actors.id) matches? [a+])
+                ]]></code>
+            </pattern>
+        </subsection>
+
+    </section>
+    <section>
+        <name>Strategies</name>
+        <subsection>
+            <name>individualisation of...</name>
+            <pattern>
+                <name>elite</name>
+                <code><![CDATA[
+match [
+{actors = a1, place = p1, roles = r1, st = st1},
+{actors = a2, place = p2, roles = r2}
+] from shots join speakerTurns as st
+where (
+len(intersection(a1.id, a2.id)) >= 1 and  # seg1 / actor-relation / same
+p1.studio > 0.5 and  # s1 / place / studio
+p2.studio < 0.5 and  # s2 / place / not studio
+r1.reporter < 0.5  and r2.reporter < 0.5 and  # s1, s2 / actor.role / not reporter
+max(st1.words.propn) >= 1 and  # s1 / proper noun count / >= 1
+max(st1.entities.lper) >= 1  # s1 / NEL person count / >= 1
+)
+                ]]></code>
+            </pattern>
+            <pattern>
+                <name>layperson (v1)</name>
+                <code><![CDATA[
+match [
+  {actors = a1, place = p1, roles = r1, st = st1, next = nx1},
+  {actors = a2, place = p2, roles = r2, st = st2}
+] from shots join speakerTurns as st
+where (
+  r1.reporter < 0.5 and  # s1 / actor.role / not reporter
+  any(is_indirect_gaze, a2.gaze) and  # sX / actor.gaze / indirect; Q: which actor?
+  max(st1.words.propn) >= 1 and  # t1 / proper noun / with
+  max(st1.words.pron) >= 1 and  # t2 / self-referent-pronoun / with
+  is_same_place(nx1)  # seg1 / place-relation / same
+  len(intersection(a1.id, a2.id)) >= 1  # seg1 / actor-relation / same
+)                ]]></code>                
+            </pattern>
+            <pattern>
+                <name>layperson (v2)</name>
+                <code><![CDATA[
+match [
+  {actors = a1, place = p1, roles = r1, st = st1}
+] from shots join speakerTurns as st
+where (
+  (r1.reporter > 0.5 or r1.anchor > 0.5) and  # last shot / actor.role / reporter or anchor
+  p1.studio < 0.5  and # last shot / place / not news studio
+  max(st1.words.pron) >= 1  # t2 / self-referent-pronoun / >= 1
+)
+                ]]></code>
+            </pattern>
+            <pattern>
+                <name>reporter</name>
+                <code><![CDATA[
+match [
+  {actors = a1, place = p1, roles = r1, st = st1}
+] from shots join speakerTurns as st
+where (
+  (r1.reporter > 0.5 or r1.anchor > 0.5) and  # last shot / actor.role / reporter or anchor
+  p1.studio < 0.5  and # last shot / place / not news studio
+  max(st1.words.pron) >= 1  # t2 / self-referent-pronoun / >= 1
+)                    
+                ]]></code>                
+            </pattern>
+        </subsection>
+        <subsection>
+            <name>emotionalisation</name>
+            <pattern>
+                <name>facial</name>
+                <code><![CDATA[
+match [
+  {faces = f1},
+  {faces = f2}
+] from shots where len(difference(
+    intersection(f1.emotion, f2.emotion),
+    ["neutral", "unknown"])) > 0
+                ]]></code>
+            </pattern>
+            <pattern>
+                <name>sentiment</name>
+                <code><![CDATA[
+match [
+  {sentiment = s1},
+  {sentiment = s2}
+] from speakerTurns where s1 == s2 and s1 != "neutral"
+                ]]></code>
+            </pattern>
+        </subsection>
+        <subsection>
+            <name>dramatisation</name>
+            <pattern>
+                <code><![CDATA[
+match [
+  {roles = r1, movement = m1}
+] from shots where (
+  r1.reporter > 0.5 and  # s1 / actor.role / reporter
+  m1 != STATIC  # s1 / camera movement / with
+)
+                ]]></code>
+            </pattern>
+        </subsection>
+        <subsection>
+            <name>fragmentation</name>
+            <pattern>
+                <name>with inserted shots</name>
+                <code><![CDATA[
+match [
+  {actors = a1, roles = r1, movement = m1},
+  {actors = a2}
+] from shots where (
+  r1.reporter < 0.5 and  # s1 / actor.role / not reporter
+  all(is_indirect_gaze, a1.gaze) and  # s1 / actor.gaze / indirect Q: which actors?
+  len(intersection(a1.id, a2.id)) == 0  # s1, s2 / actor relation / different
+)
+                ]]></code>                
+            </pattern>
+            <pattern>
+                <name>with split-screen</name>
+                <code><![CDATA[
+match [
+  {roles = r1}
+] from shots where (
+  r1.reporter < 0.5  # s1 / actor.role / not reporter
+)
+                ]]></code>                
+            </pattern>
+        </subsection>
+    </section>
+    <section>
+        <name>Experiments</name>
+
         <subsection>
             <name>POV</name>            
             <pattern>
                 <code><![CDATA[
 match [
-{faces = f1, scale < MEDIUM_SHOT},
-{faces = f2},
-{faces = f3, scale < MEDIUM_SHOT}]
+    {faces = f1, scale < MEDIUM_SHOT},
+    {faces = f2},
+    {faces = f3, scale < MEDIUM_SHOT}]
 from shots
 where actor_relation(f1, f3) == SAME and actor_relation(f1, f2) == DIFFERENT
                 ]]></code>
@@ -110,9 +289,9 @@ where actor_relation(f1, f3) == SAME and actor_relation(f1, f2) == DIFFERENT
                 <name>frameshare</name>
                 <code><![CDATA[
 match [
-{faces = [{id = a, region = ra, actor = True}]},
-{faces = [{id = b, region = rb, actor = True}]}
-] from shots
+    {faces = [{id = a, region = ra, actor = True}]},
+    {faces = [{id = b, region = rb, actor = True}]}]
+from shots
 where a != b and region_relation(ra, rb) == SAME
                 ]]></code>
             </pattern>
@@ -120,13 +299,14 @@ where a != b and region_relation(ra, rb) == SAME
                 <name>opposition</name>
                 <code><![CDATA[
 match [
-{faces = [{id = a, region = ra, actor = True}]},
-{faces = [{id = b, region = rb, actor = True}]}
-] from shots
+    {faces = [{id = a, region = ra, actor = True}]},
+    {faces = [{id = b, region = rb, actor = True}]}]
+from shots
 where a != b and region_relation(ra, rb) == DIFFERENT
                 ]]></code>
             </pattern>
         </subsection>
+
         <subsection>
             <name>enhancement</name>
 
@@ -187,47 +367,5 @@ where s1.next.audio.whisper > 0.95 and s2.next.audio.whisper > 0.95
             </pattern>
 
         </subsection>
-    </section>
-    <section>
-        <name>Strategies</name>
-        <subsection>
-            <name>individualisation</name>
-                <pattern>
-                    <code><![CDATA[
-match [
-{faces = [{id = a}], scale <= MEDIUM_SHOT, st = st1},
-{faces = [{id = a}], scale <= MEDIUM_SHOT}
-] from shots join speakerTurns as st
-where max(st1.words.propn) > 0
-                    ]]></code>
-                </pattern>
-        </subsection>
-        <subsection>
-            <name>emotionalisation</name>
-            <pattern>
-                <name>based on face emotion</name>
-                <code><![CDATA[
-match [
-{faces=[{emotion={top=a}}]},
-{faces=[{emotion={top=a}}]}
-] from shots where a != "unknown" and a != "neutral"
-                ]]></code>
-            </pattern>
-            <pattern>
-                <name>based on speaker emotion</name>
-                <code><![CDATA[
-match [
-{emotion={top=a}},
-{emotion={top=a}}
-] from speakerTurns where a != "unknown" and a != "neutral"
-                ]]></code>
-            </pattern>
-        </subsection>
-    </section>
-    <section>
-        <name>Explore</name>
-    </section>
-    <section>
-        <name>Tutorial</name>
     </section>
 </library>
