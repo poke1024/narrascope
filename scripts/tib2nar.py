@@ -17,7 +17,7 @@ from functools import reduce
 from intervaltree import Interval, IntervalTree
 
 
-SCHEMA_VERSION = "2024-06-20"
+SCHEMA_VERSION = "2024-06-21"
 
 
 class Video:
@@ -333,21 +333,26 @@ class SpeakerSentimentData:
 		with open(path / "whisper_sentiment.pkl", "rb") as f:
 			data = pickle.load(f)
 
-		self.tree = make_interval_tree([
-			Interval(d["start"], d["end"], d)
-			for d in data["output_data"]["speakerturn_wise"]])
-				
-		dmap = data["output_data"]["sent_labelmap"]
-		self.label_map = dict([(v, k) for k, v in dmap.items()])
+		ws = dict(
+			neutral=0,
+			positive=1,
+			negative=-1)
 
-		self.p_list = p_list(
-			[self.label_map[i] for i in range(len(self.label_map))],
-			0.5,
-			k_filter=lambda x: x.upper() + "_SENTIMENT")
-	
+		self.tree = make_interval_tree([
+			Interval(d["start"], d["end"], ws[d["pred"] or "neutral"])
+			for d in data["output_data"]["speakerturn_wise"]])
+					
 	def query(self, t0, t1):
-		y = weighted_prob(self.tree, t0, t1, "prob")
-		return self.p_list(y)
+		ys = [iv.data for iv in self.tree.overlap(t0, t1)]
+		if len(ys) < 1:
+			return "neutral"
+		y_mean = np.mean(ys)
+		if abs(y_mean) < 0.5:
+			return "neutral"
+		elif y_mean > 0:
+			return "positive"
+		else:
+			return "negative"
 			
 	
 class SpeakerWordClassData:

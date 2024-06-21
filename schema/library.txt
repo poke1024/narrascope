@@ -49,11 +49,6 @@ def top(xs):
 		case Just x: x.name
 		else: ""
 
-def top(xs: List Fuzzy Sentiment):
-	match max(xs, .p):
-		case Just x: x.name
-		else: NEUTRAL
-
 def level(xs: List Fuzzy String, name: String):
   sum(for x in xs:
     if x.name == name:
