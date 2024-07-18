@@ -75,3 +75,5 @@ def id_pairs(xs):
 def always(f, xs):
   all(lambda x: match x: case [x1, x2]: f, pairs(xs))
 
+def most(xs):
+	take(len(xs) - 1, xs)
