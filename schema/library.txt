@@ -19,7 +19,7 @@ def pp_shot(shot: ImportedShot) -> Shot:
 		movement = shot.movement,
 		people = shot.people,
 		faces = map(pp_face, shot.faces),
-		//actors = map(pp_face, filter(lambda x: x.actor, shot.faces)),
+		actors = map(pp_face, shot.faces),  //map(pp_face, filter(lambda x: x.actor, shot.faces)),
 		tags = shot.tags,
 		next = shot.next,
 		place = shot.place,

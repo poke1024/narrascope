@@ -152,6 +152,7 @@ type Shot = {
 	movement: ShotMovement,
 	people: Bool,
 	faces: List Face,
+	actors: List Face,
 	tags: List Fuzzy String,
 	next: ShotSimilarity,
 	place: Place,
