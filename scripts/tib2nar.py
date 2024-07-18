@@ -241,8 +241,13 @@ class FaceData:
 		self.emotion_p_list = p_list(self.emotion_keys, 0.5)
 
 	def query(self, t0, t1):
+		any_faces = False
+		faces = []
+
 		key = lambda x: x.data["cluster_id"]
 		for k, ivs in groupby(sorted(self.tree.overlap(t0, t1), key=key), key=key):
+			any_faces = True
+
 			xs = [x.data for x in ivs]
 
 			screen_time = min(1., np.sum([x["delta_time"] for x in xs]) / (t1 - t0))
@@ -252,7 +257,7 @@ class FaceData:
 			emotions = self.emotion_p_list(
 				np.mean([x["emotion"] for x in xs], axis=0))
 			
-			yield {
+			faces.append({
 				"id": str(k),
 				"size": face_size(xs),
 				"emotion": top_of_p_list(emotions),
@@ -260,13 +265,15 @@ class FaceData:
 					self.headpose_keys,
 					np.mean([x["headpose"] for x in xs], axis=0))),
 				"gaze": make_head_gaze(np.median([x["headgaze"] for x in xs], axis=0)),
-				"actor": is_actor(xs),
+				#"actor": is_actor(xs),
 				"stime": to_percentage(screen_time),
 				"region": dict(
 					(box_k, to_percentage(np.sqrt(np.median([
 						Box.coverage(box, Box.from_bbox(x["bbox"])) for x in xs]))))
 					for box_k, box in self.regions.items())
-			}
+			})
+
+		return any_faces, faces
 
 
 def weighted_prob(tree, t0, t1, k_prob):
@@ -645,6 +652,9 @@ class ShotData:
 		for shot_rec in self.shot_detection_data["output_data"]["shots"]:
 			t0 = float(shot_rec["start"])
 			t1 = float(shot_rec["end"])
+
+			any_faces, faces = face_data.query(t0, t1)
+
 			yield {
 				"startTime": t0,
 				"endTime": t1,
@@ -653,7 +663,8 @@ class ShotData:
 				"angle": shot_angle_data.query(t0, t1),
 				"level": shot_level_data.query(t0, t1),
 				"movement": scale_movement_data.movement(t0, t1),
-				"faces": list(face_data.query(t0, t1)),
+				"people": any_faces,
+				"faces": faces,
 				"tags": speaker_audio_clf.query(t0, t1),
 				"next": query_sim(t0, t1),
 				"place": place_data.query(t0, t1),

@@ -33,7 +33,7 @@ enum Gender
 
 type Fuzzy a = {
 	name: a,
-	p: Float  # [0, 1]
+	p: Float  // [0, 1]
 }
 
 type Words = {
@@ -63,8 +63,8 @@ type Entities = {
 
 type SpeakerTurn = {
 	id: String,
-	startTime: Float,  # seconds
-	endTime: Float,    # seconds
+	startTime: Float,  // seconds
+	endTime: Float,    // seconds
 	numWords: Int,
 	words: Words,
 	entities: Entities,
@@ -75,26 +75,26 @@ type SpeakerTurn = {
 }
 
 type HeadPose = {
-	pitch: Float,  # degrees
-	roll: Float,   # degrees
-	yaw: Float     # degrees
+	pitch: Float,  // degrees
+	roll: Float,   // degrees
+	yaw: Float     // degrees
 }
 
 type HeadGaze = {
-	h: Float,	   # degrees, horizontal
-	v: Float       # degrees, vertical
+	h: Float,	   // degrees, horizontal
+	v: Float       // degrees, vertical
 }
 
 type Region = {
-	center: Float,  # [0, 100]
-	left: Float,    # [0, 100]
-	right: Float    # [0, 100]
+	center: Float,  // [0, 100]
+	left: Float,    // [0, 100]
+	right: Float    // [0, 100]
 }
 
 type Face = {
 	id: String,
 	size: Float,
-	stime: Float,      # screen time in the shot [0, 100]
+	stime: Float,      // screen time in the shot [0, 100]
 	head: HeadPose,
 	gaze: HeadGaze,
 	emotion: String,
@@ -144,14 +144,14 @@ type Roles = {
 }
 
 type Shot = {
-	startTime: Float,  # seconds
-	endTime: Float,    # seconds
+	startTime: Float,  // seconds
+	endTime: Float,    // seconds
 	scale: ShotScale,
 	angle: ShotAngle,
 	level: ShotLevel,
 	movement: ShotMovement,
+	people: Bool,
 	faces: List Face,
-	actors: List Face,
 	tags: List Fuzzy String,
 	next: ShotSimilarity,
 	place: Place,

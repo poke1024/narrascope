@@ -1,8 +1,7 @@
 type ImportedFace = {
 	id: String,
 	size: Float,
-	actor: Bool,
-	stime: Float,      # screen time in the shot [0, 100]
+	stime: Float,      // screen time in the shot [0, 100]
 	head: HeadPose,
 	gaze: HeadGaze,
 	emotion: String,
@@ -10,12 +9,13 @@ type ImportedFace = {
 }
 
 type ImportedShot = {
-	startTime: Float,  # seconds
-	endTime: Float,    # seconds
+	startTime: Float,  // seconds
+	endTime: Float,    // seconds
 	scale: ShotScale,
 	angle: ShotAngle,
 	level: ShotLevel,
 	movement: ShotMovement,
+	people: Bool,
 	faces: List ImportedFace,
 	tags: List Fuzzy String,
 	next: ShotSimilarity,

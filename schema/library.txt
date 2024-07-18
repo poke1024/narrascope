@@ -17,8 +17,9 @@ def pp_shot(shot: ImportedShot) -> Shot:
 		angle = shot.angle,
 		level = shot.level,
 		movement = shot.movement,
+		people = shot.people,
 		faces = map(pp_face, shot.faces),
-		actors = map(pp_face, filter(lambda x: x.actor, shot.faces)),
+		//actors = map(pp_face, filter(lambda x: x.actor, shot.faces)),
 		tags = shot.tags,
 		next = shot.next,
 		place = shot.place,
@@ -42,37 +43,35 @@ def pp_corpus(corpus: ImportedCorpus) -> Corpus:
 		videos = map(pp_video, corpus.videos)
 	}
 
-# utility functions
+// utility functions
 
-def median_or_0(x):
-  match median(x):
-    case Just y: y
-    case Nothing: 0.
-
-def top(xs):
-	match max(xs, .p):
-		case Just x: x.name
-		else: ""
-
-def level(xs: List Fuzzy String, name: String):
-  sum(for x in xs:
-    if x.name == name:
-      x.p
-    else:
-      0.
-    )
-
-def pairs(xs):
-	zip(xs, drop(1, xs))
-
-def ratios(xs: List Float):
-	for x in pairs(xs):
-		match x:
-			case [a, b]:
-				a / b
+@operator(infix, left, 7)
+def overlaps(a, b):
+  len(intersection(a, b)) >= 1
 
 def is_indirect_gaze(g):
   abs(g.h) > 2.5
 
 def is_same_place(next):
   next.image.siglip > 0.25
+
+@macro
+def any_id_pair(f, xs):
+  any(lambda pair: match pair:
+    case Rule key [x1, x2]:
+      f
+    case _:
+      False
+  , group_by(.id, xs))
+
+def id_pairs(xs):
+    for x in filter(lambda x: len(x) == 2,
+        values(group_by(.id, xs))):
+        match x:
+            case [a, b]:
+                Pair a b
+
+@macro
+def always(f, xs):
+  all(lambda x: match x: case [x1, x2]: f, pairs(xs))
+
