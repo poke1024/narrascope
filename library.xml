@@ -1,5 +1,88 @@
 <library>
     <section>
+        <name>Edge</name>
+
+        <subsection>
+
+        <pattern>
+            <name>cut-in</name>
+           <code><![CDATA[
+match [
+    {faces=[{id=x, size=a}]},
+    {faces=[]},
+    {faces=[{id=x, size>a * 1.5}]}]
+from shots
+where a > 0.1
+            ]]></code>
+        </pattern>
+
+        <pattern>
+            <name>cut-away to people</name>
+           <code><![CDATA[
+match [
+    {faces=[{id=x, size>0.2}], next = {image = {siglip < 0.8}}},
+    {faces=f2},
+    {faces=[{id=x, size>0.2}]}]
+from shots
+where len(f2) > 3 and x not in f2.id
+            ]]></code>
+        </pattern>
+
+        <pattern>
+            <name>cut-away to objects</name>
+           <code><![CDATA[
+match [
+    {faces=f1, next = {image = {siglip < 0.8}}},
+    {people=False},
+    {faces=f3}]
+from shots
+where f1.id overlaps f3.id
+            ]]></code>
+        </pattern>
+
+        <pattern>
+            <name>intensification (same face)</name>
+           <code><![CDATA[
+match [s1, s2]
+from shots
+where some Pair #1 #2 in id_pairs(s1.faces + s2.faces):
+    #2.size / #1.size > 2.0
+            ]]></code>
+        </pattern>
+
+
+        <pattern>
+            <name>intensification (multiple faces)</name>
+           <code><![CDATA[
+def any_gets_larger(f):
+  some [#1, #2] in f.size: #2 > #1 * 2.
+
+
+match [s1, s2, s3]
+from shots
+where (
+  (median(s2.faces.size) ?? 0.) > (median(s1.faces.size) ?? 0.) * 2. and
+  s1.next.image.siglip > 0.5 and
+  any_gets_larger(values(group_by(.id, flatten([s2.faces, s3.faces]))))
+)
+            ]]></code>
+        </pattern>
+
+        <pattern>
+            <name>intensification (object)</name>
+           <code><![CDATA[
+match [2..5 of {faces=[]} = sx]
+from shots
+where ((every Pair #1 #2 in pairs(sx.scale): #2 < #1) and
+    (every x in most(sx.next.image.siglip): x > 0.75))
+            ]]></code>
+        </pattern>
+
+        </subsection>
+
+    </section>
+
+    <section>
         <name>FEPs</name>
         <subsection>
             <name>cut-in</name>
@@ -276,110 +359,6 @@ where (
 )
                 ]]></code>                
             </pattern>
-        </subsection>
-    </section>
-    <section>
-        <name>Experiments</name>
-
-        <subsection>
-            <name>POV</name>            
-            <pattern>
-                <code><![CDATA[
-match [
-    {faces = f1, scale < MEDIUM_SHOT},
-    {faces = f2},
-    {faces = f3, scale < MEDIUM_SHOT}]
-from shots
-where (
-    actor_relation(f1, f3) == SAME and
-    actor_relation(f1, f2) == DIFFERENT
-)
-                ]]></code>
-            </pattern>
-        </subsection>
-        <subsection>
-            <name>region</name>
-            <pattern>
-                <name>frameshare</name>
-                <code><![CDATA[
-match [
-    {faces = [{id = a, region = ra, actor = True}]},
-    {faces = [{id = b, region = rb, actor = True}]}]
-from shots
-where a != b and region_relation(ra, rb) == SAME
-                ]]></code>
-            </pattern>
-            <pattern>
-                <name>opposition</name>
-                <code><![CDATA[
-match [
-    {faces = [{id = a, region = ra, actor = True}]},
-    {faces = [{id = b, region = rb, actor = True}]}]
-from shots
-where a != b and region_relation(ra, rb) == DIFFERENT
-                ]]></code>
-            </pattern>
-        </subsection>
-
-        <subsection>
-            <name>enhancement</name>
-
-            <pattern>
-                <name>thematics enhancement</name>
-                <comment>Hannover Technical Feature A, Unknown Thresholds</comment>
-                <code><![CDATA[
-match [s1, s2, {}]
-from shots
-where s1.next.action.kineticsvmae > 0.95 and s2.next.action.kineticsvmae > 0.95
-                ]]></code>
-            </pattern>
-            <pattern>
-                <name>thematics enhancement</name>
-                <comment>Hannover Technical Feature B, Unknown Thresholds</comment>
-                <code><![CDATA[
-match [s1, s2, {}]
-from shots
-where s1.next.action.ssv2vmae > 0.95 and s2.next.action.ssv2vmae > 0.95
-                ]]></code>
-            </pattern>
-            <pattern>
-                <name>thematics enhancement</name>
-                <comment>Hannover Technical Feature C, Unknown Thresholds</comment>
-                <code><![CDATA[
-match [s1, s2, {}]
-from shots
-where s1.next.action.kineticsxclip > 0.95 and s2.next.action.kineticsxclip > 0.95
-                ]]></code>
-            </pattern>
-
-            <pattern>
-                <name>ambience enhancement</name>
-                <comment>Hannover Technical Feature A, Unknown Thresholds</comment>
-                <code><![CDATA[
-match [s1, s2, {}]
-from shots
-where s1.next.audio.wav2vec2 > 0.95 and s2.next.audio.wav2vec2 > 0.95
-                ]]></code>
-            </pattern>
-            <pattern>
-                <name>ambience enhancement</name>
-                <comment>Hannover Technical Feature B, Unknown Thresholds</comment>
-                <code><![CDATA[
-match [s1, s2, {}]
-from shots
-where s1.next.audio.beats > 0.95 and s2.next.audio.beats > 0.95
-                ]]></code>
-            </pattern>
-            <pattern>
-                <name>ambience enhancement</name>
-                <comment>Hannover Technical Feature C, Unknown Thresholds</comment>
-                <code><![CDATA[
-match [s1, s2, {}]
-from shots
-where s1.next.audio.whisper > 0.95 and s2.next.audio.whisper > 0.95
-                ]]></code>
-            </pattern>
-
         </subsection>
     </section>
 </library>
