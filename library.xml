@@ -6,14 +6,13 @@
             <pattern>
                <code><![CDATA[
 match [
-    {actors = a1, scale = s1},
-    // s1, s2 / size relation / closer
-    {scale < s1}+,
-    {actors = a2}]
+    {scale = scale1} = s1,
+    {scale < scale1}+,  // s1, s2 / size relation / closer
+    s3]
 from shots
 where (
     // s1, s3 / actor relation / same
-    a1.id overlaps a2.id
+    s1.actors.id overlaps s3.actors.id
 )
                 ]]></code>
             </pattern>
@@ -23,34 +22,31 @@ where (
             <pattern>
                 <name>to people</name>
                 <code><![CDATA[
-match [
-    {actors = a1},
-    {actors = a2},
-    {actors = a3}]
+match [s1, s2, s3]
 from shots
 where (
-    # s1, s3 / actor relation / same
-    a1.id overlaps a3.id and
+  // s1, s3 / actor relation / same
+  s1.actors.id overlaps s3.actors.id and
 
-    # s1, s2 / actor relation / different
-    not(a1.id overlaps a2.id) and
-
-    # s2 / num faces / >= 2
-    len(a2) >= 2)
+  // s1, s2 / actor relation / different
+  not(s1.actors.id overlaps s2.actors.id) and
+    
+  // s2 / num faces / >= 2
+  len(s2.faces) >= 2
+)
                 ]]></code>
             </pattern>
             <pattern>
                 <name>to objects</name>
                 <code><![CDATA[
 match [
-    {actors = a1},
-    # s2 / actor-count / 0
-    {actors = []}+,
-    {actors = a3}]
+    s1,
+    {actors = []}+,  // s2 / actor-count / 0
+    s3]
 from shots
 where (
-    # s1, s3 / actor relation / same
-    a1.id overlaps a3.id
+    // s1, s3 / actor relation / same
+    s1.actors.id overlaps s3.actors.id
 )
                 ]]></code>
             </pattern>
@@ -60,57 +56,33 @@ where (
             <pattern>
                 <name>same face</name>
                 <code><![CDATA[
-@operator(infix, left, 4)
-@macro def for-any(f, xs):
-  any(lambda x: match x: case [x1, x2]: f, xs)
-
-def values(xs: List Rule a b) -> List b:
-    for x in xs:
-        match x:
-            case Rule key value:
-                value
-
-@macro
-def id-pairs(xs):
-    filter(lambda x: len(x) == 2,
-        values(groupBy(lambda x: x.id, xs)))
-
-match [
-    {actors = a1},
-    {actors = a2}]
+match [s1, s2]
 from shots
 where (
-    # s1, s2 / actor relation, face size / same and bigger
-    (x2.size / x1.size > 1.05) for-any id-pairs(a1 + a2)
+    // s1, s2 / actor relation, face size / same and bigger
+    for-some(
+        id-pairs(s1.actors + s2.actors),
+        (Pair #1 #2) has (#2.size / #1.size > 1.05)
+    )
 )
                 ]]></code>
             </pattern>
             <pattern>
                 <name>multiple faces</name>
                 <code><![CDATA[
-@operator(infix, left, 4)
-@macro def for-all(f, xs):
-  all(lambda x: match x: case [x1, x2]: f, xs)
-
-@operator(infix, left, 7)
-def maybe(lhs, rhs):
-    match lhs:
-        case Just x:
-            x
-        case Nothing:
-            rhs
-
-match [3..6 of {} = seq]
+match [3..6 of {} = sx]
 from shots
 where (
-    # s1, s2 / shot scale / closer
-    (x2 < x1) for-all pairs(seq.scale) and
+    // s1, s2 / shot scale / closer
+    for-all(pairs(sx.scale), (Pair #1 #2) has (#2 < #1)) and
 
-    # s1, s2 / face size / median face size 5% larger
-    (x2 > 1.05 * x1) for-all pairs(for x in seq: median(x.faces.size) maybe 0) and
+    // s1, s2 / face size / median face size 5% larger
+    for-all(
+        pairs(for x in sx: median(x.faces.size) ?? 0),
+        (Pair #1 #2) has (#2 > 1.05 * #1)) and
 
-    # seg1 / face count / >= 3
-    sum(for x in take(1, seq): len(x.faces)) >= 3
+    // seg1 / face count / >= 3
+    sum(for x in take(1, sx): len(x.faces)) >= 3
 )
                 ]]></code>
             </pattern>
@@ -119,24 +91,23 @@ where (
             <name>shot reverse shot</name>
             <pattern>
                 <code><![CDATA[
-match [
-    {actors = a1},
-    {actors = a2},
-    {actors = a3}]
+match [s1, s2, s3]
 from shots
-where (
-    # s1, s2 / actor relation / different
-    not(a1.id overlaps a2.id) and
+where let ax = [s1, s2, s3].actors: (
+    // s1, s2 / actor relation / different
+    not(s1.actors.id overlaps s2.actors.id) and
 
-    # s1, s3 / actor relation / same
-    a1.id overlaps a3.id and
+    // s1, s3 / actor relation / same
+    s1.actors.id overlaps s3.actors.id and
 
-    # gaze / non-direct
-    all(is_indirect_gaze, flatten([a1.gaze, a2.gaze, a3.gaze])) and
+    // gaze / non-direct
+    for-all(
+        flatten(ax.gaze),
+        is-indirect-gaze) and
 
-    # s1, s2, s3 / actor count / 1
-    len(a1) == 1 and len(a2) == 1 and len(a3) == 1
-)                
+    // s1, s2, s3 / actor count / 1
+    map(len, ax) == [1, 1, 1]
+)
                 ]]></code>
             </pattern>
         </subsection>
@@ -146,17 +117,17 @@ where (
             <pattern>
                 <code><![CDATA[
 match [
-    {actors = a1, scale = s1},
-    {actors = a2, scale = s2},
-    {actors = a3, scale = s1},  # s1, s3 / shot size / same
-    {actors = a4, scale = s2}]  # s2, s4 / shot size / same
+    {scale = scale1} = s1,
+    {scale = scale2} = s2,
+    {scale = scale1} = s3,  // s1, s3 / shot size / same
+    {scale = scale2} = s4]  // s2, s4 / shot size / same
 from shots
 where (
-    # s1, s3 / actor relation / same
-    a1.id overlaps a3.id and
+    // s1, s3 / actor relation / same
+    s1.actors.id overlaps s3.actors.id and
 
-    # s2, s4 / actor relation / same
-    a2.id overlaps a4.id
+    // s2, s4 / actor relation / same
+    s2.actors.id overlaps s4.actors.id
 )
                 ]]></code>
             </pattern>
@@ -167,22 +138,22 @@ where (
             <pattern>
                 <name>talk / dialogue</name>
                 <code><![CDATA[
-match [2... of {st = [{id = a}]}]
-from shots join speakerTurns as st
+match [2..6 of {turn = [{id = a}]}]
+from shots join speakerTurns as turn
                 ]]></code>
             </pattern>
             <pattern>
                 <name>spatial</name>
                 <code><![CDATA[
-# siglip is a technical image similarity value
-match [2... of {next = {image = {siglip > 0.25}}}]
+// siglip is a technical image similarity value
+match [2..6 of {next = {image = {siglip > 0.25}}}]
 from shots
                 ]]></code>
             </pattern>
             <pattern>
                 <name>actors</name>
                 <code><![CDATA[
-match [2... of {} = s]
+match [2..6 of {} = s]
 from shots
 where (map(set, s.actors.id) matches? [a+])
                 ]]></code>
@@ -197,60 +168,55 @@ where (map(set, s.actors.id) matches? [a+])
             <pattern>
                 <name>elite</name>
                 <code><![CDATA[
-match [
-    {actors = a1, place = p1, roles = r1, st = st1},
-    {actors = a2, place = p2, roles = r2}
-] from shots join speakerTurns as st
+match [s1, s2]
+from shots join speakerTurns as turn
 where (
-    len(intersection(a1.id, a2.id)) >= 1 and  # seg1 / actor-relation / same
-    p1.studio > 0.5 and  # s1 / place / studio
-    p2.studio < 0.5 and  # s2 / place / not studio
-    r1.reporter < 0.5  and r2.reporter < 0.5 and  # s1, s2 / actor.role / not reporter
-    max(st1.words.propn) >= 1 and  # s1 / proper noun count / >= 1
-    max(st1.entities.lper) >= 1  # s1 / NEL person count / >= 1
+    s1.actors.id overlaps s2.actors.id and  // seg1 / actor-relation / same
+    likely s1.place.studio and  // s1 / place / studio
+    unlikely s2.place.studio and  // s2 / place / not studio
+    unlikely s1.roles.reporter  and unlikely s2.roles.reporter and  // s1, s2 / actor.role / not reporter
+    max(s1.turn.words.propn) ?? 0 >= 1 and  // s1 / proper noun count / >= 1
+    max(s1.turn.entities.lper) ?? 0 >= 1  // s1 / NEL person count / >= 1
 )
                 ]]></code>
             </pattern>
             <pattern>
                 <name>layperson (v1)</name>
                 <code><![CDATA[
-match [
-    {actors = a1, place = p1, roles = r1, st = st1, next = nx1},
-    {actors = a2, place = p2, roles = r2, st = st2}
-] from shots join speakerTurns as st
+match [s1, s2]
+from shots join speakerTurns as turn
 where (
-    r1.reporter < 0.5 and  # s1 / actor.role / not reporter
-    any(is_indirect_gaze, a2.gaze) and  # sX / actor.gaze / indirect; Q: which actor?
-    max(st1.words.propn) >= 1 and  # t1 / proper noun / with
-    max(st1.words.pron) >= 1 and  # t2 / self-referent-pronoun / with
-    is_same_place(nx1)  # seg1 / place-relation / same
-    len(intersection(a1.id, a2.id)) >= 1  # seg1 / actor-relation / same
-)                ]]></code>                
+    unlikely s1.roles.reporter and  // s1 / actor.role / not reporter
+    for-some(s2.actors.gaze, is-indirect-gaze) and  // sX / actor.gaze / indirect; Q: which actor?
+    max(s1.turn.words.propn) ?? 0 >= 1 and  // t1 / proper noun / with
+    max(s1.turn.words.pron) ?? 0 >= 1 and  // t2 / self-referent-pronoun / with
+    is-same-place(s1.next) and  // seg1 / place-relation / same
+    (s1.actors.id overlaps s2.actors.id)  // seg1 / actor-relation / same
+)
+                ]]></code>                
             </pattern>
             <pattern>
                 <name>layperson (v2)</name>
                 <code><![CDATA[
-match [
-    {actors = a1, place = p1, roles = r1, st = st1}
-] from shots join speakerTurns as st
+match [s1, s2]
+from shots join speakerTurns as turn
 where (
-    (r1.reporter > 0.5 or r1.anchor > 0.5) and  # last shot / actor.role / reporter or anchor
-    p1.studio < 0.5  and # last shot / place / not news studio
-    max(st1.words.pron) >= 1  # t2 / self-referent-pronoun / >= 1
+    unlikely s1.place.studio and // s1 / place / not studio
+    unlikely s2.place.studio and // s2 / place / not studio
+    s1.actors.id overlaps s2.actors.id  // seg1 / actor-relation / at least one is same
 )
                 ]]></code>
             </pattern>
             <pattern>
                 <name>reporter</name>
                 <code><![CDATA[
-match [
-    {actors = a1, place = p1, roles = r1, st = st1}
-] from shots join speakerTurns as st
+match [s1]
+from shots join speakerTurns as turn
 where (
-    (r1.reporter > 0.5 or r1.anchor > 0.5) and  # last shot / actor.role / reporter or anchor
-    p1.studio < 0.5  and # last shot / place / not news studio
-    max(st1.words.pron) >= 1  # t2 / self-referent-pronoun / >= 1
-)                    
+    (likely s1.roles.reporter or likely s1.roles.anchor) and  // last shot / actor.role / reporter or anchor
+    unlikely s1.place.studio  and // last shot / place / not news studio
+    max(s1.turn.words.pron) ?? 0 >= 1  // t2 / self-referent-pronoun / >= 1
+)
                 ]]></code>                
             </pattern>
         </subsection>
@@ -259,21 +225,19 @@ where (
             <pattern>
                 <name>facial</name>
                 <code><![CDATA[
-match [
-    {faces = f1},
-    {faces = f2}
-] from shots where len(difference(
-    intersection(f1.emotion, f2.emotion),
+match [s1, s2]
+from shots
+where len(difference(
+    intersection(s1.faces.emotion, s2.faces.emotion),
     ["neutral", "unknown"])) > 0
                 ]]></code>
             </pattern>
             <pattern>
                 <name>sentiment</name>
                 <code><![CDATA[
-match [
-    {sentiment = s1},
-    {sentiment = s2}
-] from speakerTurns where s1 == s2 and s1 != "neutral"
+match [s1, s2]
+from speakerTurns
+where s1.sentiment == s2.sentiment and s1.sentiment != "neutral"
                 ]]></code>
             </pattern>
         </subsection>
@@ -281,11 +245,11 @@ match [
             <name>dramatisation</name>
             <pattern>
                 <code><![CDATA[
-match [
-    {roles = r1, movement = m1}
-] from shots where (
-    r1.reporter > 0.5 and  # s1 / actor.role / reporter
-    m1 != STATIC  # s1 / camera movement / with
+match [s1]
+from shots
+where (
+    likely s1.roles.reporter and  // s1 / actor.role / reporter
+    s1.movement != STATIC  // s1 / camera movement / with
 )
                 ]]></code>
             </pattern>
@@ -295,23 +259,20 @@ match [
             <pattern>
                 <name>with inserted shots</name>
                 <code><![CDATA[
-match [
-    {actors = a1, roles = r1, movement = m1},
-    {actors = a2}
-] from shots where (
-    r1.reporter < 0.5 and  # s1 / actor.role / not reporter
-    all(is_indirect_gaze, a1.gaze) and  # s1 / actor.gaze / indirect Q: which actors?
-    len(intersection(a1.id, a2.id)) == 0  # s1, s2 / actor relation / different
+match [s1, s2] from shots where (
+    unlikely s1.roles.reporter and  // s1 / actor.role / not reporter
+    for-all(s1.actors.gaze, is-indirect-gaze) and  // s1 / actor.gaze / indirect Q: which actors?
+    (s1.actors.id overlaps s2.actors.id)  // s1, s2 / actor relation / different
 )
                 ]]></code>                
             </pattern>
             <pattern>
                 <name>with split-screen</name>
                 <code><![CDATA[
-match [
-    {roles = r1}
-] from shots where (
-    r1.reporter < 0.5  # s1 / actor.role / not reporter
+match [s1]
+from shots
+where (
+    unlikely s1.roles.reporter  // s1 / actor.role / not reporter
 )
                 ]]></code>                
             </pattern>
@@ -329,7 +290,10 @@ match [
     {faces = f2},
     {faces = f3, scale < MEDIUM_SHOT}]
 from shots
-where actor_relation(f1, f3) == SAME and actor_relation(f1, f2) == DIFFERENT
+where (
+    actor_relation(f1, f3) == SAME and
+    actor_relation(f1, f2) == DIFFERENT
+)
                 ]]></code>
             </pattern>
         </subsection>
