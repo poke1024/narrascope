@@ -1,4 +1,4 @@
-def pp_face(face: ImportedFace) -> Face:
+fn pp_face(face: ImportedFace) -> Face:
 	{
 		id = face.id,
 		size = face.size,
@@ -9,7 +9,7 @@ def pp_face(face: ImportedFace) -> Face:
 		region = face.region
 	}
 
-def pp_shot(shot: ImportedShot) -> Shot:
+fn pp_shot(shot: ImportedShot) -> Shot:
 	{
 		startTime = shot.startTime,
 		endTime = shot.endTime,
@@ -26,7 +26,7 @@ def pp_shot(shot: ImportedShot) -> Shot:
 		roles = shot.roles
 	}
 
-def pp_video(video: ImportedVideo) -> Video:
+fn pp_video(video: ImportedVideo) -> Video:
 	{
 		channel = video.channel,
 		filename = video.filename,
@@ -37,7 +37,7 @@ def pp_video(video: ImportedVideo) -> Video:
 		speakerTurns = video.speakerTurns
 	}
 
-def pp_corpus(corpus: ImportedCorpus) -> Corpus:
+fn pp_corpus(corpus: ImportedCorpus) -> Corpus:
 	{
 		version = corpus.version,
 		videos = map(pp_video, corpus.videos)
@@ -46,17 +46,17 @@ def pp_corpus(corpus: ImportedCorpus) -> Corpus:
 // utility functions
 
 @operator(infix, left, 7)
-def overlaps(a, b):
+fn overlaps(a, b):
   len(intersection(a, b)) >= 1
 
-def is_indirect_gaze(g):
+fn is_indirect_gaze(g):
   abs(g.h) > 2.5
 
-def is_same_place(next):
+fn is_same_place(next):
   next.image.siglip > 0.25
 
 @macro
-def any_id_pair(f, xs):
+fn any_id_pair(f, xs):
   any(lambda pair: match pair:
     case Rule key [x1, x2]:
       f
@@ -64,7 +64,7 @@ def any_id_pair(f, xs):
       False
   , group_by(.id, xs))
 
-def id_pairs(xs):
+fn id_pairs(xs):
     for x in filter(lambda x: len(x) == 2,
         values(group_by(.id, xs))):
         match x:
@@ -72,8 +72,8 @@ def id_pairs(xs):
                 Pair a b
 
 @macro
-def always(f, xs):
+fn always(f, xs):
   all(lambda x: match x: case [x1, x2]: f, pairs(xs))
 
-def most(xs):
+fn most(xs):
 	take(len(xs) - 1, xs)
