@@ -1,48 +1,3 @@
-fn pp_face(face: ImportedFace) -> Face:
-	{
-		id = face.id,
-		size = face.size,
-		stime = face.stime,
-		head = face.head,
-		gaze = face.gaze,
-		emotion = face.emotion,
-		region = face.region
-	}
-
-fn pp_shot(shot: ImportedShot) -> Shot:
-	{
-		startTime = shot.startTime,
-		endTime = shot.endTime,
-		scale = shot.scale,
-		angle = shot.angle,
-		level = shot.level,
-		movement = shot.movement,
-		people = shot.people,
-		faces = map(pp_face, shot.faces),
-		actors = map(pp_face, shot.faces),  //map(pp_face, filter(lambda x: x.actor, shot.faces)),
-		tags = shot.tags,
-		next = shot.next,
-		place = shot.place,
-		roles = shot.roles
-	}
-
-fn pp_video(video: ImportedVideo) -> Video:
-	{
-		channel = video.channel,
-		filename = video.filename,
-		title = video.title,
-		publishedAt = video.publishedAt,
-		videoId = video.videoId,
-		shots = map(pp_shot, video.shots),
-		speakerTurns = video.speakerTurns
-	}
-
-fn pp_corpus(corpus: ImportedCorpus) -> Corpus:
-	{
-		version = corpus.version,
-		videos = map(pp_video, corpus.videos)
-	}
-
 // utility functions
 
 @operator(infix, left, 7)
@@ -55,25 +10,30 @@ fn is_indirect_gaze(g):
 fn is_same_place(next):
   next.image.siglip > 0.25
 
-@macro
-fn any_id_pair(f, xs):
-  any(lambda pair: match pair:
+@macro fn any_id_pair(f, xs):
+  any(fn pair: match pair:
     case Rule key [x1, x2]:
       f
     case _:
       False
-  , group_by(.id, xs))
+  , group(xs, .id))
 
 fn id_pairs(xs):
-    for x in filter(lambda x: len(x) == 2,
-        values(group_by(.id, xs))):
+    for x in filter(fn x: len(x) == 2,
+        values(group(xs, .id))):
         match x:
             case [a, b]:
-                Pair a b
+                (a, b)
 
-@macro
-fn always(f, xs):
-  all(lambda x: match x: case [x1, x2]: f, pairs(xs))
+@macro fn always(f, xs):
+  all(fn x: match x: case [x1, x2]: f, pairs(xs))
 
-fn most(xs):
-	take(len(xs) - 1, xs)
+@operator(infix, left, 7)
+@macro fn likely(r, f):
+	r.f > 0.5
+
+@operator(infix, left, 7)
+@macro fn unlikely(r, f):
+	r.f < 0.5
+
+fn actors(s): s.faces

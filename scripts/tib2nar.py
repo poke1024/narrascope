@@ -9,6 +9,8 @@ import collections
 import base64
 import datetime
 import traceback
+import logging
+import sys
 
 from pathlib import Path
 from tqdm import tqdm
@@ -16,22 +18,24 @@ from itertools import groupby, chain
 from functools import reduce
 from intervaltree import Interval, IntervalTree
 
-
 SCHEMA_VERSION = "2024-06-21"
+
+logging.basicConfig(stream=sys.stdout, level=logging.INFO)
 
 
 class Video:
 	def __init__(self, path):
 		pass
 
+
 class Corpus:
 	def __init__(self, files):
 		self.files = files
-	
+
 	@staticmethod
 	def read(base_path: Path):
 		files = []
-	
+
 		for channel_path in base_path.iterdir():
 			if not channel_path.name.startswith("."):
 				for video_path in channel_path.iterdir():
@@ -44,17 +48,17 @@ class Corpus:
 		catalog = SimpleCatalog()
 		video_data = []
 
-		if limit is None:
+		if limit is None or limit < 0:
 			limit = len(self.files)
-		
+
 		for p in tqdm(self.files[:limit]):
 			video = Video(p)
 			try:
 				video_data.append(video.export(catalog))
 			except Exception as e:
-				print(e)
-				raise click.ClickException(f"failed to process {p}")
-	
+				logging.error(f"failed to process {p}")
+				logging.exception(e)
+
 		with open(out_path, "w") as f:
 			f.write(json.dumps({
 				"version": SCHEMA_VERSION,
@@ -78,7 +82,7 @@ class FramewiseShotScaleClassification:
 			"FS": "FULL_SHOT",
 			"LS": "LONG_SHOT"
 		}
-		
+
 		dt = data["output_data"]["delta_time"]
 
 		self.tree = IntervalTree([
@@ -122,7 +126,7 @@ class Box:
 	def coverage(self, a: Box):
 		x = Box.intersect(self, a)
 		return x.area / self.area
-	
+
 	@property
 	def area(self):
 		return np.prod(np.maximum(self.p1 - self.p0, 0))
@@ -143,7 +147,7 @@ def is_actor(xs):
 
 def to_percentage(x):
 	return float(round(x, 3))
-	
+
 
 def to_speaker_turns(segments):
 	prep = map(lambda x: {
@@ -152,7 +156,7 @@ def to_speaker_turns(segments):
 		"speaker": x.get("speaker") or "UNKNOWN",
 		"words": x["text"].split()
 	}, sorted(segments, key=lambda x: x["start"]))
-	
+
 	for sp, xs in groupby(prep, key=lambda x: x["speaker"]):
 		xs = list(xs)
 		yield {
@@ -175,12 +179,14 @@ def top_of_p_list(xs, min_p=0.5):
 def p_list(keys, threshold, k_filter=None):
 	if k_filter is None:
 		k_filter = lambda k: k.lower()
+
 	def make(probs):
 		r = []
 		for k, v in zip(keys, probs):
 			if v >= threshold:
 				r.append({"name": k_filter(k), "p": to_percentage(v)})
 		return r
+
 	return make
 
 
@@ -191,29 +197,67 @@ def keyed_p_list(threshold):
 			if v >= threshold:
 				r.append({"name": k.lower(), "p": to_percentage(v)})
 		return r
+
 	return make
 
 
-def make_head_gaze(data):
-	return {
-		"h": float(round((data[2, 0] + data[3, 0]) / 2, 1)),
-		"v": float(round((data[2, 1] + data[3, 1]) / 2, 1))
-	}
+class Gaze:
+	def __init__(self, x):
+		self.hv = np.mean([
+			x["left_gaze_deg"],
+			x["right_gaze_deg"]], axis=0)
+
+	@staticmethod
+	def median(xs):
+		hv = [round(x, 1) for x in np.median([
+			x.hv for x in xs], axis=0)]
+		return {
+			"h": hv[0],
+			"v": hv[1]
+		}
 
 
 def make_interval_tree(xs):
 	return IntervalTree(list(filter(lambda x: x.begin < x.end, xs)))
-	
+
+
+def avg_emotions(xs):
+	labels = [
+		"angry",
+		"surprise",
+		"fear",
+		"sad",
+		"happy",
+		"disgust",
+		"neutral"
+	]
+
+	assert len(xs) >= 1
+	ks = set(xs[0].keys())
+	assert all(set(x.keys()) == ks for x in xs[1:])
+	data = np.array([[x[k] for k in ks] for x in xs])
+	avg_data = np.mean(data, axis=0)
+	assert avg_data.shape[0] == len(ks)
+	kv = dict(zip(ks, avg_data))
+	return dict(([k, round(kv.get(k, 0), 1)] for k in labels))
+
 
 class FaceData:
 	def __init__(self, path):
 		with open(path / "face_analysis.pkl", "rb") as f:
 			data = pickle.load(f)
 
-		self.tree = IntervalTree([
-			Interval(d["time"], d["time"] + d["delta_time"], d)
-			for d in data["faces"]])
-		
+		if all("delta_time" in d for d in data["faces"]):
+			self.tree = IntervalTree([
+				Interval(d["time"], d["time"] + d["delta_time"], d)
+				for d in data["faces"]])
+		else:
+			ivs = [(d0["time"], d1["time"], d0) for d0, d1 in zip(data["faces"], data["faces"][1:])]
+			assert all(iv[0] is not None for iv in ivs)
+			assert all(iv[1] is not None for iv in ivs)
+			ivs = [iv for iv in ivs if iv[0] < iv[1]]
+			self.tree = IntervalTree.from_tuples(ivs)
+
 		self.regions = {
 			'left': Box([0, 0], [0.5, 1]),
 			'center': Box([0.25, 0], [0.75, 1]),
@@ -227,25 +271,22 @@ class FaceData:
 			"roll"
 		]
 
-		# see https://github.com/FakeNarratives/fakenarratives/blob/b328665d865d26a2808e6e2974674eb5555c1fba/graph_visualization/export_graphml.py#L295C38-L295C43
-		self.emotion_keys = [
-			"angry",
-			"disgust",
-			"fear",
-			"happy",
-			"sad",
-			"surprise",
-			"neutral"
-		]
-
-		self.emotion_p_list = p_list(self.emotion_keys, 0.5)
-
 	def query(self, t0, t1):
+		assert t0 is not None
+		assert t1 is not None
+
 		any_faces = False
 		faces = []
 
+		ivs = self.tree.overlap(t0, t1)
+		ivs = [iv for iv in ivs if iv.data["cluster_id"] is not None]
+
+		for i, iv in enumerate(ivs):
+			if iv.data["cluster_id"] < 0:
+				iv.data["cluster_id"] = -(1 + i)  # unique id
+
 		key = lambda x: x.data["cluster_id"]
-		for k, ivs in groupby(sorted(self.tree.overlap(t0, t1), key=key), key=key):
+		for k, ivs in groupby(sorted(ivs, key=key), key=key):
 			any_faces = True
 
 			xs = [x.data for x in ivs]
@@ -254,19 +295,18 @@ class FaceData:
 			if screen_time < 0.5:
 				continue
 
-			emotions = self.emotion_p_list(
-				np.mean([x["emotion"] for x in xs], axis=0))
-			
 			faces.append({
 				"id": str(k),
 				"size": face_size(xs),
-				"emotion": top_of_p_list(emotions),
-				"head": dict((k, int(v)) for k, v in zip(
-					self.headpose_keys,
-					np.mean([x["headpose"] for x in xs], axis=0))),
-				"gaze": make_head_gaze(np.median([x["headgaze"] for x in xs], axis=0)),
-				#"actor": is_actor(xs),
-				"stime": to_percentage(screen_time),
+				"emotion": avg_emotions([x["emotions"] for x in xs]),
+
+				"stime": screen_time,
+
+				"head": dict(yaw=0, pitch=0, roll=0),
+				"gaze": Gaze.median([Gaze(x["gaze"]) for x in xs]),
+
+				"speaking": any(x["speaking"] for x in xs),
+
 				"region": dict(
 					(box_k, to_percentage(np.sqrt(np.median([
 						Box.coverage(box, Box.from_bbox(x["bbox"])) for x in xs]))))
@@ -286,7 +326,7 @@ def weighted_prob(tree, t0, t1, k_prob):
 
 	if not w or sum(w) == 0:
 		return []
-		
+
 	return np.average(a, weights=w, axis=0)
 
 
@@ -312,12 +352,12 @@ def weighted_prob_k(tree, t0, t1, k_label, k_prob):
 
 	k2i = dict((k, i) for i, k in enumerate(set(chain(*[x.keys() for x in r]))))
 	i2k = [x[0] for x in sorted(k2i.items(), key=lambda x: x[1])]
-	
+
 	a = np.zeros((len(r), len(i2k)), dtype=np.float64)
 	for i, x in enumerate(r):
 		for k, p in x.items():
 			a[i, k2i[k]] = p
-	
+
 	return dict((k, v) for k, v in zip(i2k, np.average(a, weights=w, axis=0)))
 
 
@@ -348,7 +388,7 @@ class SpeakerSentimentData:
 		self.tree = make_interval_tree([
 			Interval(d["start"], d["end"], ws[d["pred"] or "neutral"])
 			for d in data["output_data"]["speakerturn_wise"]])
-					
+
 	def query(self, t0, t1):
 		ys = [iv.data for iv in self.tree.overlap(t0, t1)]
 		if len(ys) < 1:
@@ -360,8 +400,8 @@ class SpeakerSentimentData:
 			return "positive"
 		else:
 			return "negative"
-			
-	
+
+
 class SpeakerWordClassData:
 	def __init__(self, path):
 		with open(path / "whisper_pos.pkl", "rb") as f:
@@ -397,7 +437,6 @@ class SpeakerWordClassData:
 			Interval(d["start"], d["end"], counts_vector(d))
 			for d in data["output_data"]["speakerturn_wise"]])
 
-
 	def query(self, t0, t1):
 		ys = []
 		for iv in self.tree.overlap(t0, t1):
@@ -406,7 +445,7 @@ class SpeakerWordClassData:
 		if len(ys) > 0:
 			return dict(zip(self.tags, np.sum(ys, axis=0).tolist()))
 		else:
-			return dict(zip(self.tags, [0] * len(self.tags)))			
+			return dict(zip(self.tags, [0] * len(self.tags)))
 
 
 class SpeakerAudioClfData:
@@ -436,7 +475,7 @@ class SpeakerSegmentClfData:
 
 		self.p_list = keyed_p_list(0.5)
 
-	def emotion(self, t0, t1):		
+	def emotion(self, t0, t1):
 		x = weighted_prob_k(self.tree, t0, t1, "emotion_pred_top3", "emotion_prob_top3")
 		return self.p_list(x)
 
@@ -451,25 +490,24 @@ def load_sim_data(path, method, feature, suffix, value):
 		data = pickle.load(f)
 
 	try:
-		r = dict()
+		ivs = []
 		for x in data["output_data"]:
 			t0 = x["shot"]["start"]
 			t1 = x["shot"]["end"]
-			r[(t0, t1)] = round(float(value(x[feature])), 2)
+			ivs.append((t0, t1, round(float(value(x[feature])), 2)))
+		return ShotRecords(ivs)
 	except:
 		raise RuntimeError(f"failed to parse {full_path}")
-
-	return r
 
 
 class ShotSimData:
 	def __init__(self, path, feature, methods, suffix, value):
 		self.data = dict((k, load_sim_data(
 			path, k, feature, suffix, value)) for k in methods)
-	
+
 	def query(self, t0, t1):
 		return dict(
-			(k.lower().replace("-", ""), v[(t0, t1)])
+			(k.lower().replace("-", ""), v.query(t0, t1))
 			for k, v in self.data.items())
 
 
@@ -477,18 +515,55 @@ def mode(xs):
 	return collections.Counter(xs).most_common(1)[0][0]
 
 
+def fix_iv(iv):
+	if iv[0] == iv[1]:
+		return (iv[0], iv[0] + 0.01, iv[2])
+	else:
+		return iv
+
+
+class BestEffortShotRecords:
+	def __init__(self, ivs):
+		ivs = [fix_iv(iv) for iv in ivs]
+		self.tree = IntervalTree.from_tuples(ivs)
+
+	def query(self, t0, t1):
+		xs = list(self.tree.overlap(t0, t1))
+		if not xs:
+			raise RuntimeError("no overlap")
+		q = Box.xx(t0, t1)
+		ys = [q.coverage(Box.xx(x.begin, x.end)) for x in xs]
+		return xs[np.argmax(ys)].data
+
+
+class ExactShotRecords:
+	def __init__(self, ivs):
+		self.data = dict()
+		for t0, t1, x in ivs:
+			self.data[(t0, t1)] = x
+
+	def query(self, t0, t1):
+		return self.data[(t0, t1)]
+
+
+ShotRecords = ExactShotRecords
+
+
 class ShotAngleData:
 	def __init__(self, path):
 		with open(path / "videoshot_angle.pkl", "rb") as f:
 			self.shot_angle_data = pickle.load(f)
 
-		self.data = {}
-		
+		ivs = []
 		for x in self.shot_angle_data["output_data"]:
-			self.data[(x["shot"]["start"], x["shot"]["end"])] = mode(x["predictions"]).upper()
-	
+			ivs.append((
+				x["shot"]["start"],
+				x["shot"]["end"],
+				mode(x["predictions"]).upper()))
+		self.records = ShotRecords(ivs)
+
 	def query(self, t0, t1):
-		return self.data[(t0, t1)]
+		return self.records.query(t0, t1)
 
 
 class ShotLevelData:
@@ -496,13 +571,16 @@ class ShotLevelData:
 		with open(path / "videoshot_level.pkl", "rb") as f:
 			self.shot_angle_data = pickle.load(f)
 
-		self.data = {}
-		
+		ivs = []
 		for x in self.shot_angle_data["output_data"]:
-			self.data[(x["shot"]["start"], x["shot"]["end"])] = mode(x["predictions"]).upper()
-	
+			ivs.append((
+				x["shot"]["start"],
+				x["shot"]["end"],
+				mode(x["predictions"]).upper()))
+		self.records = ShotRecords(ivs)
+
 	def query(self, t0, t1):
-		return self.data[(t0, t1)]
+		return self.records.query(t0, t1)
 
 
 class ShotScaleMovementData:
@@ -512,7 +590,7 @@ class ShotScaleMovementData:
 
 		self._scale = {}
 		self._movement = {}
-		
+
 		full_scale_names = {
 			"ECS": "EXTREME_CLOSE_UP",
 			"CS": "CLOSE_UP",
@@ -521,17 +599,22 @@ class ShotScaleMovementData:
 			"LS": "LONG_SHOT"
 		}
 
+		ivs = []
 		for x in self.shot_angle_data["output_data"]:
-			key = (x["shot"]["start"], x["shot"]["end"])
 			scale, movement = x["prediction"]
-			self._scale[key] = full_scale_names[scale.upper()]
-			self._movement[key] = movement.upper()
-	
+			ivs.append((
+				x["shot"]["start"],
+				x["shot"]["end"], {
+					"scale": full_scale_names[scale.upper()],
+					"movement": movement.upper()
+				}))
+		self.records = ShotRecords(ivs)
+
 	def scale(self, t0, t1):
-		return self._scale[(t0, t1)]
+		return self.records.query(t0, t1)["scale"]
 
 	def movement(self, t0, t1):
-		return self._movement[(t0, t1)]
+		return self.records.query(t0, t1)["movement"]
 
 
 class InstructBLIPData:
@@ -607,7 +690,7 @@ class ShotData:
 		self.path = path
 
 	def iter(self):
-		#shot_scale_classification = FramewiseShotScaleClassification(self.path)
+		# shot_scale_classification = FramewiseShotScaleClassification(self.path)
 		face_data = FaceData(self.path)
 		speaker_audio_clf = SpeakerAudioClfData(self.path)
 		shot_angle_data = ShotAngleData(self.path)
@@ -648,7 +731,7 @@ class ShotData:
 			for domain, scopes in shot_sim_data.items():
 				r[domain] = scopes["next_1"].query(t0, t1)
 			return r
-		
+
 		for shot_rec in self.shot_detection_data["output_data"]["shots"]:
 			t0 = float(shot_rec["start"])
 			t1 = float(shot_rec["end"])
@@ -658,7 +741,7 @@ class ShotData:
 			yield {
 				"startTime": t0,
 				"endTime": t1,
-				#"scale": shot_scale_classification.query(t0, t1),
+				# "scale": shot_scale_classification.query(t0, t1),
 				"scale": scale_movement_data.scale(t0, t1),
 				"angle": shot_angle_data.query(t0, t1),
 				"level": shot_level_data.query(t0, t1),
@@ -670,7 +753,7 @@ class ShotData:
 				"place": place_data.query(t0, t1),
 				"roles": roles_data.query(t0, t1)
 			}
-			
+
 
 class SpeakerTurnData:
 	def __init__(self, path):
@@ -688,7 +771,6 @@ class SpeakerTurnData:
 		speaker_audio_clf = SpeakerAudioClfData(self.path)
 		speaker_segment_clf = SpeakerSegmentClfData(self.path)
 		ent_data = EntitiesData(self.path)
-		
 
 		for turn in self.turns:
 			t0 = float(turn["start"])
@@ -806,7 +888,7 @@ class Video:
 		if meta is None:
 			return None
 
-		shot_data = ShotData(self.path)		
+		shot_data = ShotData(self.path)
 		shots = list(shot_data.iter())
 
 		speaker_turn_data = SpeakerTurnData(self.path)
@@ -821,23 +903,24 @@ class Video:
 			"shots": shots,
 			"speakerTurns": speaker_turns
 		}
-		
+
 
 @click.command()
 @click.argument('pkl', type=click.Path(exists=True, file_okay=False))
 @click.argument('out', type=click.Path(exists=False))
-def tib2nar(pkl, out):
+@click.option('--limit', type=int, default=-1)
+def tib2nar(pkl, out, limit: int):
 	"""Convert directory of TIB files (PKL) to narrascope JSON data file (OUT)."""
 	out = Path(out)
 	if not out.suffix == ".json":
 		raise click.BadArgumentUsage("output file must end in .json")
 
 	if not out.parent.exists():
-		raise click.BadArgumentUsage(f"output path does not exist: {out.parent}")		
-	
+		raise click.BadArgumentUsage(f"output path does not exist: {out.parent}")
+
 	try:
 		corpus = Corpus.read(Path(pkl))
-		corpus.export(out)
+		corpus.export(out, limit)
 	except:
 		traceback.print_exc()
 	else:
