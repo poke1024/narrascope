@@ -275,7 +275,7 @@ class FaceData:
 		assert t0 is not None
 		assert t1 is not None
 
-		any_faces = False
+		num_faces = 0
 		faces = []
 
 		ivs = self.tree.overlap(t0, t1)
@@ -287,7 +287,7 @@ class FaceData:
 
 		key = lambda x: x.data["cluster_id"]
 		for k, ivs in groupby(sorted(ivs, key=key), key=key):
-			any_faces = True
+			num_faces += 1
 
 			xs = [x.data for x in ivs]
 
@@ -313,7 +313,7 @@ class FaceData:
 					for box_k, box in self.regions.items())
 			})
 
-		return any_faces, faces
+		return num_faces, faces
 
 
 def weighted_prob(tree, t0, t1, k_prob):
@@ -702,7 +702,7 @@ class ShotData:
 		roles_data = InstructBLIPData(self.path, "news_roles")
 
 		shot_sim = {
-			"image": {
+			"visual": {
 				"methods": ["siglip", "convnextv2", "places"],
 				"suffix": "_shot_similarity",
 				"value": lambda x: x[1]  # median
@@ -726,30 +726,31 @@ class ShotData:
 				r[scope] = ShotSimData(self.path, scope, **args)
 			shot_sim_data[domain] = r
 
-		def query_sim(t0, t1):
+		def query_sim(t0, t1, k):
 			r = dict()
 			for domain, scopes in shot_sim_data.items():
-				r[domain] = scopes["next_1"].query(t0, t1)
+				r[domain] = scopes[k].query(t0, t1)
 			return r
 
-		for shot_rec in self.shot_detection_data["output_data"]["shots"]:
+		for i, shot_rec in enumerate(self.shot_detection_data["output_data"]["shots"]):
 			t0 = float(shot_rec["start"])
 			t1 = float(shot_rec["end"])
 
-			any_faces, faces = face_data.query(t0, t1)
+			num_faces, faces = face_data.query(t0, t1)
 
 			yield {
+				"index": i,
 				"startTime": t0,
 				"endTime": t1,
-				# "scale": shot_scale_classification.query(t0, t1),
 				"scale": scale_movement_data.scale(t0, t1),
 				"angle": shot_angle_data.query(t0, t1),
 				"level": shot_level_data.query(t0, t1),
 				"movement": scale_movement_data.movement(t0, t1),
-				"people": any_faces,
+				"people": num_faces,
 				"faces": faces,
 				"tags": speaker_audio_clf.query(t0, t1),
-				"next": query_sim(t0, t1),
+				"next1": query_sim(t0, t1, "next_1"),
+				"next2": query_sim(t0, t1, "next_2"),
 				"place": place_data.query(t0, t1),
 				"roles": roles_data.query(t0, t1)
 			}
