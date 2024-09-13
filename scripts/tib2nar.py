@@ -231,7 +231,7 @@ def avg_emotions(xs):
 		"disgust",
 		"neutral"
 	]
-
+	
 	assert len(xs) >= 1
 	ks = set(xs[0].keys())
 	assert all(set(x.keys()) == ks for x in xs[1:])
@@ -240,7 +240,7 @@ def avg_emotions(xs):
 	assert avg_data.shape[0] == len(ks)
 	kv = dict(zip(ks, avg_data))
 	return dict(([k, round(kv.get(k, 0), 1)] for k in labels))
-
+	
 
 class FaceData:
 	def __init__(self, path):
@@ -377,7 +377,7 @@ def weighted_mode(tree, t0, t1, k_data, default):
 
 class SpeakerSentimentData:
 	def __init__(self, path):
-		with open(path / "whisper_sentiment.pkl", "rb") as f:
+		with open(path / "whisperx_sentiment.pkl", "rb") as f:
 			data = pickle.load(f)
 
 		ws = dict(
@@ -387,7 +387,7 @@ class SpeakerSentimentData:
 
 		self.tree = make_interval_tree([
 			Interval(d["start"], d["end"], ws[d["pred"] or "neutral"])
-			for d in data["output_data"]["speakerturn_wise"]])
+			for d in data["output_data"]["model_news"]["speakerturn_wise"]])
 
 	def query(self, t0, t1):
 		ys = [iv.data for iv in self.tree.overlap(t0, t1)]
@@ -404,7 +404,7 @@ class SpeakerSentimentData:
 
 class SpeakerWordClassData:
 	def __init__(self, path):
-		with open(path / "whisper_pos.pkl", "rb") as f:
+		with open(path / "whisperx_pos.pkl", "rb") as f:
 			data = pickle.load(f)
 
 		self.tags = [
@@ -450,7 +450,7 @@ class SpeakerWordClassData:
 
 class SpeakerAudioClfData:
 	def __init__(self, path):
-		with open(path / "whisperspeaker_audioClf.pkl", "rb") as f:
+		with open(path / "whisperxspeaker_audioClf.pkl", "rb") as f:
 			data = pickle.load(f)
 
 		self.tree = make_interval_tree([
@@ -466,7 +466,7 @@ class SpeakerAudioClfData:
 
 class SpeakerSegmentClfData:
 	def __init__(self, path):
-		with open(path / "whisperspeaker_segmentClf.pkl", "rb") as f:
+		with open(path / "whisperxspeaker_segmentClf.pkl", "rb") as f:
 			data = pickle.load(f)
 
 		self.tree = make_interval_tree([
@@ -713,7 +713,7 @@ class ShotData:
 				"value": lambda x: x
 			},
 			"audio": {
-				"methods": ["wav2vec2", "beats", "whisper"],
+				"methods": ["wav2vec2", "beats"],  #, "whisper"],
 				"suffix": "_audio_shot_similarity",
 				"value": lambda x: x
 			}
@@ -757,7 +757,7 @@ class ShotData:
 
 class SpeakerTurnData:
 	def __init__(self, path):
-		with open(path / "asr_whisper.pkl", "rb") as f:
+		with open(path / "asr_whisperx.pkl", "rb") as f:
 			data = pickle.load(f)
 
 		self.turns = to_speaker_turns(
