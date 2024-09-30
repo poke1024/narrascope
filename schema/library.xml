@@ -178,7 +178,7 @@ s1,
 s3
         ]]></pattern>
         <guard><![CDATA[
-place_relation(s1, s2) >= 0.8 and
+place_relation(s1, s2, "siglip") >= 0.8 and
 size_relation_closer(s1, s2, 1.2)
         ]]></guard>
     </block>
@@ -193,7 +193,7 @@ s1,
 s3
         ]]></pattern>
         <guard><![CDATA[
-place_relation(s1, s2) < 0.5 and
+place_relation(s1, s2, "siglip") < 0.5 and
 actor_relation(s1, s3, 0.15) >= 1.0
         ]]></guard>
     </block>
@@ -364,8 +364,8 @@ sound_relation(s2, s3, "wav2vec2") > 0.8
 s1, s2, s3
         ]]></pattern>
         <guard><![CDATA[
-sound_relation(s1, s2, "wav2vec") > 0.8 and
-sound_relation(s2, s3, "wav2vec") > 0.8
+sound_relation(s1, s2, "wav2vec2") > 0.8 and
+sound_relation(s2, s3, "wav2vec2") > 0.8
         ]]></guard>
     </block>
 
@@ -522,7 +522,7 @@ s1, 1 .. 10 of {} = s2
 s1.roles.reporter < 0.5 and
 (every x in s2: (
     (every y in x.faces: y.speaking and is_indirect_gaze(y.gaze))
-)) and one_to_many(s1, s2, place_relation) > 0.5 and
+)) and one_to_many(s1, s2, fn x, y: place_relation(x, y, "siglip")) > 0.5 and
     one_to_many(s1, s2,
         fn u, v: actor_relation(u, v, 0.0)) > 0.5
 ]]></guard>
