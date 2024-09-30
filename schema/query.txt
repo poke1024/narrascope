@@ -1,0 +1,82 @@
+fn actors(u, t):
+  filter(fn x: x.size >= t, u.faces)
+
+fn jaccard(u, v):
+  len(intersection(u, v)) / len(union(u, v))
+
+fn size_relation_closer(s1: Shot, s2: List Shot, t):
+  every x in s2: (avg(x.faces.size) ?? 0.) / (avg(s1.faces.size) ?? 0.) > t
+
+fn size_relation_closer(s1: Shot, s2: Shot, t):
+  (avg(s2.faces.size) ?? 0.) / (avg(s1.faces.size) ?? 0.) > t
+
+fn actor_relation(u, v, t):
+  let a = actors(u, t), b = actors(v, t):
+    jaccard(a.id, b.id)
+
+fn actor_relation_one_to_many(u, vs, t):
+  min(for x in vs: actor_relation(u, x, t)) ?? 0.
+
+fn image_embedding(x, name):
+  match name:
+    case "siglip": x.visual.siglip
+    case "convnextv2": x.visual.convnextv2
+    case "places": x.visual.places
+    case "kineticsvmae": x.action.kineticsvmae
+    case "ssv2vmae": x.action.ssv2vmae
+    case "kineticsxclip": x.action.kineticsxclip
+
+
+fn visual_relation(s1, s2, name):
+  let i = min(s1.index, s2.index), j = max(s1.index, s2.index):
+    match j:
+      case i + 1:
+        image_embedding(s1.next1, name)
+      case i + 2:
+        image_embedding(s1.next2, name)
+      else:
+        -1.0
+
+fn one_to_many(u, vs, f):
+  min(for x in vs: f(u, x)) ?? 0.
+
+fn place_relation(s1, s2, name):
+  visual_relation(s1, s2, name)
+
+fn object_relation(s1, s2, name):
+  visual_relation(s1, s2, name)
+  
+fn audio_embedding(x, name):
+  match name:
+    case "wav2vec2": x.audio.wav2vec2
+    case "beats": x.audio.beats
+
+fn sound_relation(s1, s2, name):
+  let i = min(s1.index, s2.index), j = max(s1.index, s2.index):
+    match j:
+      case i + 1:
+        audio_embedding(s1.next1, name)
+      case i + 2:
+        audio_embedding(s1.next2, name)
+      else:
+        -1.0
+
+fn region_relation(r1, r2):
+  cosine_sim([r1.left, r1.center, r1.right], [r2.left, r2.center, r2.right])
+
+fn avg(xs: List Emotion):
+  {
+    angry = avg(xs.angry) ?? 0.,
+    surprise = avg(xs.surprise) ?? 0.,
+    fear = avg(xs.fear) ?? 0.,
+    sad = avg(xs.sad) ?? 0.,
+    happy = avg(xs.happy) ?? 0.,
+    disgust = avg(xs.disgust) ?? 0.,
+    neutral = avg(xs.neutral) ?? 0.
+  }
+
+fn emotion_relation(a, b, neutral):
+  cosine_sim(
+    [a.angry, a.surprise, a.fear, a.sad, a.happy, a.disgust, neutral * a.neutral],
+    [b.angry, b.surprise, b.fear, b.sad, b.happy, b.disgust, (0. - neutral) * a.neutral]
+  )

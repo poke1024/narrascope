@@ -91,14 +91,25 @@ type Region = {
 	right: Float    // [0, 100]
 }
 
+type Emotion = {
+	angry: Float,
+	surprise: Float,
+	fear: Float,
+	sad: Float,
+	happy: Float,
+	disgust: Float,
+	neutral: Float
+}
+
 type Face = {
 	id: String,
 	size: Float,
 	stime: Float,      // screen time in the shot [0, 100]
 	head: HeadPose,
 	gaze: HeadGaze,
-	emotion: String,
-	region: Region
+	emotion: Emotion,
+	region: Region,
+	speaking: Bool
 }
 
 type ImageSimilarityClassifierOutputs = {
@@ -115,12 +126,11 @@ type ActionSimilarityClassifierOutputs = {
 
 type AudioSimilarityClassifierOutputs = {
 	wav2vec2: Float,
-	beats: Float,
-	whisper: Float
+	beats: Float
 }
 
 type ShotSimilarity = {
-	image: ImageSimilarityClassifierOutputs,
+	visual: ImageSimilarityClassifierOutputs,
 	action: ActionSimilarityClassifierOutputs,
 	audio: AudioSimilarityClassifierOutputs
 }
@@ -144,17 +154,18 @@ type Roles = {
 }
 
 type Shot = {
+	index: Int,
 	startTime: Float,  // seconds
 	endTime: Float,    // seconds
 	scale: ShotScale,
 	angle: ShotAngle,
 	level: ShotLevel,
 	movement: ShotMovement,
-	people: Bool,
+	people: Int,
 	faces: List Face,
-	actors: List Face,
 	tags: List Fuzzy String,
-	next: ShotSimilarity,
+	next1: ShotSimilarity,
+	next2: ShotSimilarity,
 	place: Place,
 	roles: Roles
 }

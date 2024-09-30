@@ -35,5 +35,3 @@ fn id_pairs(xs):
 @operator(infix, left, 7)
 @macro fn unlikely(r, f):
 	r.f < 0.5
-
-fn actors(s): s.faces

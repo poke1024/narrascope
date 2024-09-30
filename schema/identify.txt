@@ -1,0 +1,47 @@
+__narrascope_query1__: List Pattern -> Type a -> String
+__narrascope_query1__ = <narrascopeQuery1>
+__narrascope_query2__: List List Pattern -> Type a -> String
+__narrascope_query2__ = <narrascopeQuery2>
+
+__narrascope_load__(internal-library)
+
+@async fn nq1(q: List Pattern): eval(__narrascope_query1__(q, @Pattern), @List Rule Video List Rule List Shot Maybe Pattern)
+fn nq2(q: List Pattern): __narrascope_query2__(for x in q: [x], @Pattern)
+fn nq1_show(q): Code(nq1(q))
+
+fn find_any_of(q): Unevaluated(_nrsc_prelude + "hits <| " + nq1(q))
+fn find_seq_of(q): Unevaluated(_nrsc_prelude + nq2(q))
+
+type IdentifyPatternsOptions = {
+    patterns: List Pattern,
+    blanks: Bool
+}
+
+fn nf_noblanks(video, ys):
+  for us -> Just x in ys: us -> {pattern = x}
+
+fn nf_blanks2(video, us, v):
+  match v:
+    case Just x: us -> {pattern = x}
+    else: us -> {pattern = BLANK}
+
+fn nf_blanks(video, ys):
+  for us -> v in ys: nf_blanks2(video, us, v)
+
+fn _cg2(xs, blanks):
+  for video -> ys in xs:
+    video -> (if blanks: nf_blanks(video, ys) else: nf_noblanks(video, ys))
+
+@async fn _cg3(key, blanks, xs): // e.g. v1 | .channel, batch ...
+  let s = to_sequences(for video -> ys in xs:
+    key(video) -> (if blanks: nf_blanks(video, ys) else: nf_noblanks(video, ys))):
+  Explorer2({sequences = s, atlas = explorer2(s.alphabet, s.sequences, 5, 4), n = 5, r = 4})
+
+@async fn pfind(patterns: List Pattern):
+  _cg2(nq1(patterns), False)
+
+@async fn pbfind(patterns: List Pattern):
+  _cg2(nq1(patterns), True)
+
+fn pattern_atlas(options: IdentifyPatternsOptions): Unevaluated(
+  `_cg3 <| .channel, ` + str(options.blanks) + ", " + nq1(options.patterns))
