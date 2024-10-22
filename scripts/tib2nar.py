@@ -802,7 +802,7 @@ class SpeakerTurnData:
 			}
 
 
-class SimpleCatalog:
+class SimpleCatalogV1:
 	def get(self, path: Path):
 		if path.parent.name == "Tagesschau":
 			m = re.search(r"TV-(\d+)-(\d+)-(\d+)", path.stem)
