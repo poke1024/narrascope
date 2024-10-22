@@ -925,12 +925,16 @@ def encode_video_id(s):
 class Video:
 	def __init__(self, path):
 		self.path = path
+		self.preflight = False
 
 	def export(self, catalog):
 		meta = catalog.get(self.path)
 
 		if meta is None:
 			return None
+
+		if self.preflight:
+			return {}
 
 		shot_data = ShotData(self.path)
 		shots = list(shot_data.iter())
