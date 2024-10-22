@@ -693,6 +693,7 @@ class ShotData:
 			self.shot_detection_data = pickle.load(f)
 
 		self.path = path
+		self.instruct_blip = True
 
 	def iter(self):
 		# shot_scale_classification = FramewiseShotScaleClassification(self.path)
@@ -701,10 +702,15 @@ class ShotData:
 		shot_angle_data = ShotAngleData(self.path)
 		shot_level_data = ShotLevelData(self.path)
 		scale_movement_data = ShotScaleMovementData(self.path)
-		place_data = InstructBLIPData(self.path, "environment", renames={
-			"news studio": "studio"
-		})
-		roles_data = InstructBLIPData(self.path, "news_roles")
+		
+		if self.instruct_blip:
+			place_data = InstructBLIPData(self.path, "environment", renames={
+				"news studio": "studio"
+			})
+			roles_data = InstructBLIPData(self.path, "news_roles")
+		else:
+			place_data = None
+			roles_data = None
 
 		shot_sim = {
 			"visual": {
@@ -756,7 +762,7 @@ class ShotData:
 				"tags": speaker_audio_clf.query(t0, t1),
 				"next1": query_sim(t0, t1, "next_1"),
 				"next2": query_sim(t0, t1, "next_2"),
-				"place": place_data.query(t0, t1),
+				"place": place_data.query(t0, t1) if place_data else [],
 				"roles": roles_data.query(t0, t1)
 			}
 
