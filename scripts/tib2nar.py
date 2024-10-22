@@ -485,6 +485,10 @@ class SpeakerSegmentClfData:
 
 def load_sim_data(path, method, feature, suffix, value, default):
 	full_path = path / f"{method}{suffix}.pkl"
+	
+	if not full_path.exists():
+		logging.warning(f"failed to find {full_path}. ignoring.")
+		return EmptyShotRecords(default)
 
 	with open(full_path, "rb") as f:
 		data = pickle.load(f)
@@ -525,6 +529,14 @@ def fix_iv(iv):
 		return (iv[0], iv[0] + 0.01, iv[2])
 	else:
 		return iv
+
+
+class EmptyShotRecords:
+	def __init__(self, default):
+		self.default = default
+	
+	def query(self, t0, t1):
+		return self.default
 
 
 class BestEffortShotRecords:
