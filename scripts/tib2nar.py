@@ -45,7 +45,7 @@ class Corpus:
 		return Corpus(files)
 
 	def export(self, out_path: Path, limit=None):
-		catalog = SimpleCatalog()
+		catalog = SimpleCatalogV2()
 		video_data = []
 
 		if limit is None or limit < 0:
@@ -878,6 +878,38 @@ class SimpleCatalog:
 				raise RuntimeError(f"failed to parse name {path.stem}")
 
 		return None
+		
+		
+class SimpleCatalogV2:
+		def __init__(self):
+			self.records = dict()
+			with open("/local/u/liebl/dienste/narrascope/catalog.json", "r") as f:
+				for r in json.loads(f.read()):
+					self.records[r["filename"].split(".")[0]] = r
+	
+		def get(self, path: Path):
+			if path.parent.name == "Tagesschau":
+				m = re.search(r"TV-(\d+)-(\d+)-(\d+)", path.stem)
+				if m is not None:
+					year = int(m.group(1)[:4])
+					month = int(m.group(1)[4:6])
+					day = int(m.group(1)[6:8])
+					return {
+						"filename": path.name,
+						"channel": "Tagesschau",
+						"title": f"Sendung vom {day}.{month}.{year}",
+						"publishedAt": datetime.datetime(year, month, day).timestamp(),
+						"url": "",
+						"id": f"Tagesschau/{re.sub(r'^whisper_', '', path.stem)}"
+					}
+	
+			r = self.records.get(path.stem)
+			if r:
+				return r
+			else:
+				raise RuntimeError(f"failed to parse name {path.stem}")
+		
+			return None
 
 
 def encode_video_id(s):
