@@ -483,7 +483,7 @@ class SpeakerSegmentClfData:
 		return weighted_mode(self.tree, t0, t1, "gender_pred", "UNKNOWN_GENDER").upper()
 
 
-def load_sim_data(path, method, feature, suffix, value):
+def load_sim_data(path, method, feature, suffix, value, default):
 	full_path = path / f"{method}{suffix}.pkl"
 
 	with open(full_path, "rb") as f:
@@ -494,16 +494,21 @@ def load_sim_data(path, method, feature, suffix, value):
 		for x in data["output_data"]:
 			t0 = x["shot"]["start"]
 			t1 = x["shot"]["end"]
-			ivs.append((t0, t1, round(float(value(x[feature])), 2)))
+			y = x.get(feature)
+			if y is None:
+				z = default
+			else:
+				z = value(y)
+			ivs.append((t0, t1, round(float(z), 2)))
 		return ShotRecords(ivs)
 	except:
 		raise RuntimeError(f"failed to parse {full_path}")
 
 
 class ShotSimData:
-	def __init__(self, path, feature, methods, suffix, value):
+	def __init__(self, path, feature, methods, suffix, value, default):
 		self.data = dict((k, load_sim_data(
-			path, k, feature, suffix, value)) for k in methods)
+			path, k, feature, suffix, value, default)) for k in methods)
 
 	def query(self, t0, t1):
 		return dict(
@@ -723,7 +728,7 @@ class ShotData:
 		for domain, args in shot_sim.items():
 			r = dict()
 			for scope in ["next_1", "next_2"]:
-				r[scope] = ShotSimData(self.path, scope, **args)
+				r[scope] = ShotSimData(self.path, scope, **args, default=0)
 			shot_sim_data[domain] = r
 
 		def query_sim(t0, t1, k):
