@@ -634,21 +634,23 @@ class ShotScaleMovementData:
 		return self.records.query(t0, t1)["movement"]
 
 
-class InstructBLIPData:
+class VLMData:
 	def __init__(self, path, kind, renames=None):
-		with open(path / f"instructblip_{kind}.pkl", "rb") as f:
+		with open(path / f"vlm_{kind}.pkl", "rb") as f:
 			data = pickle.load(f)
+			
+		out = data["output_data"]
 
-		dt = data["delta_time"]
-		ts = np.array(data["time"])
-		ys = data["responses"].T
+		dt = out["delta_time"]
+		ts = np.array(out["times"])
+		ys = out["responses"].T
 
 		self.tree = IntervalTree([
 			Interval(t, t + dt, y)
 			for t, y in zip(ts, ys)
 		])
 
-		self.labels = data["labels"]
+		self.labels = out["labels"]
 
 		if renames:
 			self.labels = [renames.get(x, x) for x in self.labels]
@@ -716,10 +718,10 @@ class ShotData:
 		scale_movement_data = ShotScaleMovementData(self.path)
 		
 		if self.instruct_blip:
-			place_data = InstructBLIPData(self.path, "environment", renames={
+			place_data = VLMData(self.path, "locations", renames={
 				"news studio": "studio"
 			})
-			roles_data = InstructBLIPData(self.path, "news_roles")
+			roles_data = VLMData(self.path, "social_roles")
 		else:
 			place_data = None
 			roles_data = None
