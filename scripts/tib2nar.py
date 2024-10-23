@@ -635,7 +635,7 @@ class ShotScaleMovementData:
 
 
 class VLMData:
-	def __init__(self, path, kind, renames=None):
+	def __init__(self, path, kind, renames=None, labels=[]):
 		with open(path / f"vlm_{kind}.pkl", "rb") as f:
 			data = pickle.load(f)
 			
@@ -650,10 +650,23 @@ class VLMData:
 			for t, y in zip(ts, ys)
 		])
 
-		self.labels = out["labels"]
-
+		self.labels = labels
+		
+		out_labels = out["labels"]
 		if renames:
-			self.labels = [renames.get(x, x) for x in self.labels]
+			out_labels = [renames.get(x, x) for x in out_labels]
+		self.out_index = dict((k, i) for i, k in enumerate(out_labels))
+		
+	def _x(self, ys):
+		zs = []
+		for k in self.labels:
+			i = self.out_index.get(k)
+			if i is None:
+				zs.append(0)
+			else:
+				zs.append(ys[i])
+		return zs
+		
 
 	def query(self, t0, t1):
 		ys = [iv.data for iv in self.tree.overlap(t0, t1)]
@@ -661,7 +674,7 @@ class VLMData:
 			return dict(zip(self.labels, [0] * len(self.labels)))
 		else:
 			mean_y = np.mean(ys, axis=0)
-			return dict(zip(self.labels, mean_y))
+			return dict(zip(self.labels, self._x(mean_y)))
 
 
 class EntitiesData:
@@ -720,8 +733,20 @@ class ShotData:
 		if self.instruct_blip:
 			place_data = VLMData(self.path, "locations", renames={
 				"news studio": "studio"
-			})
-			roles_data = VLMData(self.path, "social_roles")
+			}, labels=[
+				'indoor',
+				'rural',
+				'industrial',
+				'urban',
+				'suburban',
+				'studio'])
+			roles_data = VLMData(self.path, "social_roles", labels=[
+				'protester',
+				'anchor',
+				'reporter',
+				'politician',
+				'doctor',
+				'layperson'])
 		else:
 			place_data = None
 			roles_data = None
