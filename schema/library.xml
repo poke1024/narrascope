@@ -2,9 +2,9 @@
 
     <cell name="corpus_v1">
         <code><![CDATA[
-import schema_2024_07
+import __SCHEMA__
 import query
-corpus = load "corpus_v1.json" @Corpus
+corpus = load "__CORPUS__" @Corpus
         ]]></code>
     </cell>
 
