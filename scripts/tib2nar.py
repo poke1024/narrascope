@@ -633,6 +633,24 @@ class ShotScaleMovementData:
 		return self.records.query(t0, t1)["movement"]
 
 
+class LayoutData:
+	def __init__(self, path):
+		with open(path / "layout_detection.pkl", "rb") as f:
+			self.data = pickle.load(f)
+
+		ivs = []
+		for x in self.data["output_data"]:
+			ivs.append((
+				x["start"],
+				x["end"], {
+					"imageCount": x["layout_image_cnt"]
+				}))
+		self.records = ShotRecords(ivs)
+
+	def query(self, t0, t1):
+		return self.records.query(t0, t1)
+
+
 class VLMData:
 	def __init__(self, path, kind, renames=None, labels=[]):
 		with open(path / f"vlm_{kind}.pkl", "rb") as f:
@@ -728,6 +746,7 @@ class ShotData:
 		shot_angle_data = ShotAngleData(self.path)
 		shot_level_data = ShotLevelData(self.path)
 		scale_movement_data = ShotScaleMovementData(self.path)
+		layout_data = LayoutData(self.path)
 		
 		if self.instruct_blip:
 			place_data = VLMData(self.path, "locations", renames={
@@ -801,7 +820,8 @@ class ShotData:
 				"next1": query_sim(t0, t1, "next_1"),
 				"next2": query_sim(t0, t1, "next_2"),
 				"place": place_data.query(t0, t1) if place_data else [],
-				"roles": roles_data.query(t0, t1)
+				"roles": roles_data.query(t0, t1),
+				"layout": layout_data.query(t0, t1)
 			}
 
 

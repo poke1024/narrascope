@@ -153,6 +153,10 @@ type Roles = {
 	layperson: Float
 }
 
+type Layout = {
+	imageCount: Float
+}
+
 type Shot = {
 	index: Int,
 	startTime: Float,  // seconds
@@ -167,7 +171,8 @@ type Shot = {
 	next1: ShotSimilarity,
 	next2: ShotSimilarity,
 	place: Place,
-	roles: Roles
+	roles: Roles,
+	layout: Layout
 }
 
 type Video = {
