@@ -216,9 +216,14 @@ def keyed_p_list(threshold):
 
 class Gaze:
 	def __init__(self, x):
-		self.hv = np.mean([
-			x["left_gaze_deg"],
-			x["right_gaze_deg"]], axis=0)
+		try:
+			hv = np.mean([
+				x["left_gaze_deg"],
+				x["right_gaze_deg"]], axis=0)
+		except Exception as e:
+			logging.exception(e)
+			hv = [0, 0]
+		self.hv = hv
 
 	@staticmethod
 	def median(xs):
