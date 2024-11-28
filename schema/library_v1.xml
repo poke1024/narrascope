@@ -690,7 +690,7 @@ let [s1, s2, s3, s4] = s: (
     <block>
         <type>utilities</type>
         <name>schema</name>
-        <cell>listing("schema_2024_07.txt")</cell>
+        <cell>listing("schema_v1.txt")</cell>
     </block>
 
     <block>

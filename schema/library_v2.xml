@@ -1,0 +1,822 @@
+<library>
+
+    <cell name="corpus_v1">
+        <code><![CDATA[
+import __SCHEMA__
+import query
+corpus = load "__CORPUS__" @Corpus
+        ]]></code>
+    </cell>
+
+    <cell name="identify">
+        <code><![CDATA[
+import identify
+        ]]></code>
+    </cell>
+
+    <block>
+        <type>visualization</type>
+        <name>shot scale</name>
+        <cell use="corpus_v1"/>
+        <cell><![CDATA[
+data_explorer <| batch corpus.videos:
+select scale from shots
+        ]]></cell>
+    </block>
+
+    <block>
+        <type>visualization</type>
+        <name>shot angle</name>
+        <cell use="corpus_v1"/>
+        <cell><![CDATA[
+data_explorer <| batch corpus.videos:
+select angle from shots
+        ]]></cell>
+    </block>
+
+    <block>
+        <type>visualization</type>
+        <name>shot level</name>
+        <cell use="corpus_v1"/>
+        <cell><![CDATA[
+data_explorer <| batch corpus.videos:
+select level from shots
+        ]]></cell>
+    </block>
+
+    <block>
+        <type>visualization</type>
+        <name>shot movement</name>
+        <cell use="corpus_v1"/>
+        <cell><![CDATA[
+data_explorer <| batch corpus.videos:
+select movement from shots
+        ]]></cell>
+    </block>
+
+    <block>
+        <type>visualization</type>
+        <name>shot face counts</name>
+        <cell use="corpus_v1"/>
+        <cell><![CDATA[
+data_explorer <| batch corpus.videos:
+select min(len(faces), 4) from shots
+        ]]></cell>
+    </block>
+
+    <block>
+        <type>visualization</type>
+        <name>speaker turn gender</name>
+        <cell use="corpus_v1"/>
+        <cell><![CDATA[
+data_explorer <| batch corpus.videos:
+select gender from speakerTurns
+        ]]></cell>
+    </block>
+
+    <block>
+        <type>visualization</type>
+        <name>patterns, no blanks</name>
+        <cell use="corpus_v1"/>
+        <cell use="identify"/>
+        <cell><![CDATA[
+data_explorer <| pfind([
+    FEP_SHOT_REVERSE_SHOT,
+    FEP_INTENSIFY_V1,
+    FEP_INTENSIFY_V2A])
+        ]]></cell>
+    </block>
+
+    <block>
+        <type>visualization</type>
+        <name>patterns, blanks</name>
+        <cell use="corpus_v1"/>
+        <cell use="identify"/>
+        <cell><![CDATA[
+data_explorer <| pbfind([
+    FEP_SHOT_REVERSE_SHOT,
+    FEP_INTENSIFY_V1,
+    FEP_THEMATIC_ENHANCEMENT_A])
+        ]]></cell>
+    </block>
+
+
+<!--    <block>
+        <type>visualization</type>
+        <name>data atlas</name>
+        <cell use="corpus_v1"/>
+        <cell><![CDATA[
+data_atlas {
+    key = .channel
+} <| batch corpus.videos:
+    select scale from shots
+]]></cell>
+    </block>
+
+    <block>
+        <type>visualization</type>
+        <name>pattern atlas</name>
+        <cell use="corpus_v1"/>
+        <cell><![CDATA[
+pattern_atlas {
+  patterns = [FEP_CI_MIN, FEP_SRS, FEP_AS],
+  blanks = True
+}
+]]></cell>
+    </block> -->
+
+    <block>
+        <type>search</type>
+        <name>patterns</name>
+        <cell>find_any_of([FEP_CUT_AWAY_V1, FEP_CUT_AWAY_V2A, FEP_CUT_AWAY_V2B])</cell>
+    </block>
+
+    <block>
+        <type>search</type>
+        <name>sequence of patterns</name>
+        <cell>find_seq_of([FEP_CI_MIN, FEP_CA_O_MIN])</cell>
+    </block>
+
+    <block>
+        <type>P0</type>
+        <id>FEP_CUT_IN</id>
+        <cell use="corpus_v1"/>
+        <pattern><![CDATA[
+s1,
+1..5 of {} = s2,
+s3
+        ]]></pattern>
+        <guard><![CDATA[
+actor_relation(s1, s3, 0.15) >= 1.0 and
+size_relation_closer(s1, s2, 1.2)
+        ]]></guard>
+    </block>
+
+    <block>
+        <type>P0</type>
+        <id>FEP_CUT_AWAY_V1</id>
+        <cell use="corpus_v1"/>
+        <pattern><![CDATA[
+s1, s2, s3
+        ]]></pattern>
+        <guard><![CDATA[
+actor_relation(s1, s3, 0.15) >= 1.0 and
+len(s2.faces) >= 5 and
+actor_relation(s1, s2, 0.02) <= 0.0 and
+visual_relation(s1, s3, "siglip") >= 0.8 and
+visual_relation(s1, s2, "siglip") < 0.5
+        ]]></guard>
+    </block>
+
+    <block>
+        <type>P0</type>
+        <id>FEP_CUT_AWAY_V2A</id>
+        <cell use="corpus_v1"/>
+        <pattern><![CDATA[
+s1,
+{people=0} = s2,
+s3
+        ]]></pattern>
+        <guard><![CDATA[
+place_relation(s1, s2, "siglip") >= 0.8 and
+size_relation_closer(s1, s2, 1.2)
+        ]]></guard>
+    </block>
+
+    <block>
+        <type>P0</type>
+        <id>FEP_CUT_AWAY_V2B</id>
+        <cell use="corpus_v1"/>
+        <pattern><![CDATA[
+s1,
+{people=0} = s2,
+s3
+        ]]></pattern>
+        <guard><![CDATA[
+place_relation(s1, s2, "siglip") < 0.5 and
+actor_relation(s1, s3, 0.15) >= 1.0
+        ]]></guard>
+    </block>
+
+    <block>
+        <type>P0</type>
+        <id>FEP_INTENSIFY_V1</id>
+        <cell use="corpus_v1"/>
+        <pattern><![CDATA[
+s1, s2, s3
+        ]]></pattern>
+        <guard><![CDATA[
+some [a, b, c] in actors(s1, 0.1) + actors(s2, 0.2) + actors(s3, 0.3) gathered by id:
+        b.size / a.size > 1.25 and c.size / b.size > 1.25
+]]></guard>
+    </block>
+
+
+    <block>
+        <type>P0</type>
+        <id>FEP_INTENSIFY_V2A</id>
+        <cell use="corpus_v1"/>
+        <pattern><![CDATA[
+s1, s2, s3
+        ]]></pattern>
+        <guard><![CDATA[
+let a1 = actors(s1, 0.05), a2 = actors(s2, 0.1), a3 = actors(s3, 0.15): (
+    len(a1) >= 3 and
+    len(a2) >= 3 and
+    len(a3) >= 3 and
+    (let [m1, m2, m3] = (for s in [a1, a2, a3]: median(s.size) ?? 0.):
+        m2 / m1 > 1.2 and m3 / m2 > 1.2) and
+    visual_relation(s1, s2, "siglip") > 0.5 and
+    visual_relation(s2, s3, "siglip") > 0.5
+)
+]]></guard>
+    </block>
+
+    <block>
+        <type>P0</type>
+        <id>FEP_INTENSIFY_V2B</id>
+        <cell use="corpus_v1"/>
+        <pattern><![CDATA[
+s1, s2, s3
+        ]]></pattern>
+        <guard><![CDATA[
+let a1 = actors(s1, 0.05), a2 = actors(s2, 0.1), a3 = actors(s3, 0.15): (
+    len(a1) >= 3 and
+    len(a2) >= 3 and
+    len(a3) >= 3 and
+    (let [m1, m2, m3] = (for s in [a1, a2, a3]: median(s.size) ?? 0.):
+        m2 / m1 > 1.2 and m3 / m2 > 1.2) and
+    visual_relation(s1, s2, "siglip") > 0.5 and
+    (s1.faces.id overlaps s2.faces.id)
+)
+]]></guard>
+    </block>
+
+    <block>
+        <type>P0</type>
+        <id>FEP_INTENSIFY_V3</id>
+        <cell use="corpus_v1"/>
+        <pattern><![CDATA[
+s1, s2
+        ]]></pattern>
+        <guard><![CDATA[
+size_relation_closer(s1, s2, 1.2) and
+object_relation(s1, s2, "siglip") > 0.8 and
+len(s1.faces) == 0 and
+len(s2.faces) == 0
+]]></guard>
+    </block>
+
+    <block>
+        <type>P0</type>
+        <id>FEP_SHOT_REVERSE_SHOT</id>
+        <cell use="corpus_v1"/>
+        <pattern><![CDATA[
+s1, s2, s3
+        ]]></pattern>
+        <guard><![CDATA[
+let a1 = actors(s1, 0.3), a2 = actors(s2, 0.3), a3 = actors(s3, 0.3): (
+    len(a1) == 1 and
+    len(a2) == 1 and
+    len(a3) == 1 and
+
+    not(a1.id overlaps a2.id) and
+
+    a1.id overlaps a3.id and
+
+    (every x in flatten([a1, a2, a3].gaze): is_indirect_gaze(x))
+)
+        ]]></guard>
+    </block>
+
+    <block>
+        <type>P0</type>
+        <id>FEP_POV</id>
+        <cell use="corpus_v1"/>
+        <pattern><![CDATA[
+s1, s2, s3
+        ]]></pattern>
+        <guard><![CDATA[
+s1.scale <= MEDIUM_SHOT and
+s3.scale <= MEDIUM_SHOT and
+jaccard(s1.faces.id, s2.faces.id) == 0. and
+jaccard(s1.faces.id, s3.faces.id) == 1.
+        ]]></guard>
+    </block>
+
+    <block>
+        <type>P0</type>
+        <id>FEP_FRAMESHARE</id>
+        <cell use="corpus_v1"/>
+        <pattern><![CDATA[
+{faces=[{id=f1, region=r1}]},
+{faces=[{id=f2, region=r2}]}
+        ]]></pattern>
+        <guard><![CDATA[
+f1 != f2 and region_relation(r1, r2) > 0.8
+        ]]></guard>
+    </block>
+
+    <block>
+        <type>P0</type>
+        <id>FEP_OPPOSITION</id>
+        <cell use="corpus_v1"/>
+        <pattern><![CDATA[
+{faces=[{id=f1, region=r1}]},
+{faces=[{id=f2, region=r2}]}
+        ]]></pattern>
+        <guard><![CDATA[
+f1 != f2 and region_relation(r1, r2) < 0.8
+        ]]></guard>
+    </block>
+
+    <block>
+        <type>P0</type>
+        <id>FEP_AMBIENCE_ENHANCEMENT</id>
+        <cell use="corpus_v1"/>
+        <pattern><![CDATA[
+s1, s2, s3
+        ]]></pattern>
+        <guard><![CDATA[
+s1.movement == s2.movement and
+s2.movement == s3.movement
+        ]]></guard>
+    </block>
+
+    <block>
+        <type>P0</type>
+        <id>FEP_THEMATIC_ENHANCEMENT_A</id>
+        <cell use="corpus_v1"/>
+        <pattern><![CDATA[
+s1, s2, s3
+        ]]></pattern>
+        <guard><![CDATA[
+sound_relation(s1, s2, "wav2vec2") > 0.8 and
+sound_relation(s2, s3, "wav2vec2") > 0.8
+        ]]></guard>
+    </block>
+
+    <block>
+        <type>P0</type>
+        <id>FEP_THEMATIC_ENHANCEMENT_B</id>
+        <cell use="corpus_v1"/>
+        <pattern><![CDATA[
+s1, s2, s3
+        ]]></pattern>
+        <guard><![CDATA[
+sound_relation(s1, s2, "wav2vec2") > 0.8 and
+sound_relation(s2, s3, "wav2vec2") > 0.8
+        ]]></guard>
+    </block>
+
+    <block>
+        <type>P0</type>
+        <id>FEP_ALTERNATING_A</id>
+        <cell use="corpus_v1"/>
+        <pattern><![CDATA[
+s1,
+s2,
+s3,
+s4
+        ]]></pattern>
+        <guard><![CDATA[
+actor_relation(s1, s3, 0.2) > 0.8 and
+visual_relation(s1, s2, "siglip") < 0.5 and
+place_relation(s1, s3, "siglip") > 0.5 and
+actor_relation(s2, s4, 0.2) > 0.8 and
+place_relation(s2, s4, "siglip") > 0.5
+        ]]></guard>
+    </block>
+
+    <block>
+        <type>P0</type>
+        <id>FEP_ALTERNATING_B</id>
+        <cell use="corpus_v1"/>
+        <pattern><![CDATA[
+s1,
+s2,
+s3,
+s4
+        ]]></pattern>
+        <guard><![CDATA[
+object_relation(s1, s3, "siglip") > 0.8 and
+visual_relation(s1, s2, "siglip") < 0.5 and
+place_relation(s1, s3, "siglip") > 0.5 and
+object_relation(s2, s4, "siglip") > 0.8 and
+place_relation(s2, s4, "siglip") > 0.5
+        ]]></guard>
+    </block>
+
+    <block>
+        <type>P0</type>
+        <id>FEP_ALTERNATING_C</id>
+        <cell use="corpus_v1"/>
+        <pattern><![CDATA[
+s1,
+{people=0} = s2,
+s3,
+{people=0} = s4
+        ]]></pattern>
+        <guard><![CDATA[
+object_relation(s1, s3, "siglip") > 0.8 and
+visual_relation(s1, s2, "siglip") < 0.8 and
+place_relation(s1, s3, "siglip") > 0.5 and
+actor_relation(s2, s4, 0.2) > 0.8 and
+place_relation(s2, s4, "siglip") > 0.5
+        ]]></guard>
+    </block>
+
+    <block>
+        <type>P0</type>
+        <id>FEP_ALTERNATING_D</id>
+        <cell use="corpus_v1"/>
+        <pattern><![CDATA[
+s1,
+{people=0} = s2,
+s3,
+{people=0} = s4
+        ]]></pattern>
+        <guard><![CDATA[
+actor_relation(s1, s3, 0.2) > 0.8 and
+visual_relation(s1, s2, "siglip") < 0.8 and
+place_relation(s1, s3, "siglip") > 0.5 and
+object_relation(s2, s4, "siglip") > 0.5 and
+place_relation(s2, s4, "siglip") > 0.5
+        ]]></guard>
+    </block>
+
+    <block>
+        <type>P0</type>
+        <id>FEP_CONTINUITY_TALK</id>
+        <cell use="corpus_v1"/>
+        <pattern><![CDATA[
+2..6 of {} = s
+        ]]></pattern>
+        <join>speakerTurns as turn</join>
+        <guard>(map(set, s.turn.id) matches [a+])</guard>
+    </block>
+
+    <block>
+        <type>P0</type>
+        <id>FEP_CONTINUITY_SPATIAL</id>
+        <cell use="corpus_v1"/>
+        <pattern><![CDATA[
+2..6 of {next1 = {visual = {siglip > 0.25}}}
+        ]]></pattern>
+    </block>
+
+    <block>
+        <type>P0</type>
+        <id>FEP_CONTINUITY_ACTOR</id>
+        <cell use="corpus_v1"/>
+        <pattern><![CDATA[
+2..6 of {} = s
+        ]]></pattern>
+        <guard>(map(set, s.faces.id) matches [a+])</guard>
+    </block>
+
+    <block>
+        <type>P0</type>
+        <id>FEP_DOUBLE_CUT_IN</id>
+        <cell use="corpus_v1"/>
+        <pattern><![CDATA[
+s1, s2, s3, s4
+        ]]></pattern>
+        <guard><![CDATA[
+actor_relation(s1, s4, 0.0) > 0.8 and
+size_relation_closer(s2, s3, 1.2) and
+object_relation(s1, s2, "siglip") > 0.5 and
+object_relation(s2, s3, "siglip") > 0.5 and
+object_relation(s3, s4, "siglip") > 0.5
+        ]]></guard>
+    </block>
+
+    <block>
+        <type>P1</type>
+        <id>NRP_INDIVIDUALISATION_OF_ELITE</id>
+        <cell use="corpus_v1"/>
+        <pattern><![CDATA[
+s1, s2
+]]></pattern>
+        <join>speakerTurns as turn</join>
+        <guard><![CDATA[
+s1.place.studio > 0.5 and
+s2.place.studio < 0.5 and
+s2.roles.reporter < 0.5 and s2.roles.anchor < 0.5 and
+(some x in s1.faces: x.speaking) and
+(every x in s2.faces: not x.speaking) and
+max(s1.turn.entities.lper) ?? 0 >= 1 and
+actor_relation(s1, s2, 0.0) > 0.0
+]]></guard>
+    </block>
+
+    <block>
+        <type>P1</type>
+        <id>NRP_INDIVIDUALISATION_OF_LAYPERSON_V1</id>
+        <cell use="corpus_v1"/>
+        <pattern><![CDATA[
+s1, 1 .. 10 of {} = s2
+]]></pattern>
+        <join>speakerTurns as turn</join>
+        <guard><![CDATA[
+s1.roles.reporter < 0.5 and
+(every x in s2: (
+    (every y in x.faces: y.speaking and is_indirect_gaze(y.gaze))
+)) and one_to_many(s1, s2, fn x, y: place_relation(x, y, "siglip")) > 0.5 and
+    one_to_many(s1, s2,
+        fn u, v: actor_relation(u, v, 0.0)) > 0.5
+]]></guard>
+    </block>
+
+    <block>
+        <type>P1</type>
+        <id>NRP_INDIVIDUALISATION_OF_LAYPERSON_V2</id>
+        <cell use="corpus_v1"/>
+        <pattern><![CDATA[
+s1, 1 .. 10 of {} = s2
+]]></pattern>
+        <join>speakerTurns as turn</join>
+        <guard><![CDATA[
+s1.place.studio < 0.5 and (every x in s2: (
+    x.place.studio < 0.5 and
+    (some y in x.faces: y.speaking)
+)) and one_to_many(s1, s2,
+    fn u, v: actor_relation(u, v, 0.0)) > 0.0
+]]></guard>
+    </block>
+
+    <block>
+        <type>P1</type>
+        <id>NRP_INDIVIDUALISATION_OF_REPORTER</id>
+        <cell use="corpus_v1"/>
+        <pattern><![CDATA[
+1 .. 10 of {} = s
+]]></pattern>
+        <join>speakerTurns as turn</join>
+        <guard><![CDATA[
+every x in s: (
+    (x.roles.reporter > 0.5 or x.roles.anchor > 0.5) and
+    x.place.studio < 0.5 and
+    (every y in x.faces: y.speaking) and
+    (some y in x.turn: y.words.pron >= 1)
+)
+]]></guard>
+    </block>
+
+    <block>
+        <type>P1</type>
+        <id>NRP_EMOTIONALISATION_FACIAL</id>
+        <cell use="corpus_v1"/>
+        <pattern><![CDATA[
+s1, s2
+]]></pattern>
+        <join>speakerTurns as turn</join>
+        <guard><![CDATA[
+len(s1.faces) > 0 and len(s2.faces) > 0 and
+emotion_relation(
+    avg(s1.faces.emotion),
+    avg(s2.faces.emotion),
+    5.0) > 0.5
+]]></guard>
+    </block>
+
+    <block>
+        <type>P1</type>
+        <id>NRP_EMOTIONALISATION_SENTIMENT</id>
+        <cell use="corpus_v1"/>
+        <pattern><![CDATA[
+s1, s2
+]]></pattern>
+        <join>speakerTurns as turn</join>
+        <guard><![CDATA[
+let sentiment = set(s1.turn.sentiment): (
+sentiment == set(s2.turn.sentiment) and
+sentiment != set(["NEUTRAL"]))
+]]></guard>
+    </block>
+
+    <block>
+        <type>P1</type>
+        <id>NRP_DRAMATISATION</id>
+        <cell use="corpus_v1"/>
+        <pattern><![CDATA[
+s
+]]></pattern>
+        <join>speakerTurns as turn</join>
+        <guard><![CDATA[
+s.roles.reporter < 0.5 and
+(some x in s.faces: x.speaking) and
+s.movement != STATIC
+]]></guard>
+    </block>
+
+    <block>
+        <type>P1</type>
+        <id>NRP_FRAGMENTATION_INSERTED_SHOTS</id>
+        <cell use="corpus_v1"/>
+        <pattern><![CDATA[
+s1, s2, s3
+]]></pattern>
+        <join>speakerTurns as turn</join>
+        <guard><![CDATA[
+s1.roles.reporter < 0.5 and
+(some x in s1.faces: is_indirect_gaze(x.gaze)) and
+actor_relation(s1, s2, 0.0) < 0.5
+]]></guard>
+    </block>
+
+    <block>
+        <type>P1</type>
+        <id>NRP_FRAGMENTATION_SPLIT_SCREEN</id>
+        <cell use="corpus_v1"/>
+        <pattern><![CDATA[
+s
+]]></pattern>
+        <join>speakerTurns as turn</join>
+        <guard><![CDATA[
+s.roles.reporter < 0.5 and
+(some x in s.faces: x.speaking)
+]]></guard>
+    </block>
+
+    <block>
+        <type>P1</type>
+        <id>NRP_FRAGMENTATION_INSERTED_SHOTS_NEW</id>
+        <cell use="corpus_v1"/>
+        <pattern><![CDATA[
+4 of {} = s
+]]></pattern>
+        <join>speakerTurns as turn</join>
+        <guard><![CDATA[
+let [s1, s2, s3, s4] = s: (
+    actor_relation(s1, s3, 0.2) > 0.8 and
+    visual_relation(s1, s2, "siglip") < 0.5 and
+    place_relation(s1, s3, "siglip") > 0.5 and
+    object_relation(s2, s4, "siglip") > 0.5 and
+    place_relation(s1, s4, "siglip") > 0.5 and
+    (map(set, s.turn.id) matches [a+])
+)
+]]></guard>
+    </block>
+
+    <block>
+        <type>select</type>
+        <name>select / single</name>
+        <cell use="corpus_v1"/>
+        <cell>select scale from shots</cell>
+    </block>
+
+    <block>
+        <type>select</type>
+        <name>select / multiple</name>
+        <cell use="corpus_v1"/>
+        <cell>select scale, level, movement from shots</cell>
+    </block>
+
+    <block>
+        <type>select</type>
+        <name>select / single</name>
+        <cell use="corpus_v1"/>
+        <cell>select words.verb from speakerTurns</cell>
+    </block>
+
+    <block>
+        <type>select</type>
+        <name>select / computation</name>
+        <cell use="corpus_v1"/>
+        <cell>select avg(faces.gaze.h) ?? 0. from shots</cell>
+    </block>
+
+    <block>
+        <type>utilities</type>
+        <name>schema</name>
+        <cell>listing("schema_v2.txt")</cell>
+    </block>
+
+    <block>
+        <type>utilities</type>
+        <name>videos</name>
+        <cell use="corpus_v1"/>
+        <cell>corpus.videos</cell>
+    </block>
+
+    <block>
+        <type>utilities</type>
+        <name>shots</name>
+        <cell use="corpus_v1"/>
+        <cell>corpus.videos.shots</cell>
+    </block>
+
+    <block>
+        <type>language</type>
+        <name>fep / stats</name>
+        <cell use="corpus_v1"/>
+        <cell><![CDATA[
+fn cov(xs):
+    for Rule(video, rs) in xs:
+        (video.channel, (sum for Rule(k, Just v) in rs: 1) / len(rs))
+
+fn gcov(xs):
+    for Rule(k, v) in group(cov(xs), fn (k, v): k):
+      k -> avg(for (_, x) in v: x) ?? 0.
+      
+// fep / cut-in, minimal version
+plot <| gcov <| batch corpus.videos:
+    annotate [
+        {faces=[{id=x, size=a}]},
+        {faces=[]},
+        {faces=[{id=x, size>a * 1.5}]}
+    ] if (
+    a > 0.1
+    ) as "FEP_CI_MIN"
+    from shots
+]]></cell>
+    </block>
+
+    <block>
+        <type>language</type>
+        <name>data and types</name>
+        <cell><![CDATA[
+examples
+]]></cell>
+    </block>
+
+    <block>
+        <type>language</type>
+        <name>list plot</name>
+        <cell><![CDATA[
+plot {
+    x = [1, 2, 3, 4, 5],
+    y = [1, 2, 4, 8, 16]
+}
+]]></cell>
+    </block>
+
+    <block>
+        <type>language</type>
+        <name>bar plot</name>
+        <cell><![CDATA[
+plot ["a" -> 1.5, "b" -> 5.0]
+]]></cell>
+    </block>
+
+    <block>
+        <type>language</type>
+        <name>tables</name>
+        <cell><![CDATA[
+[{x = 1, y = 0}, {x = 2, y = 5}, {x = 10, y = 3}]
+]]></cell>
+    </block>
+
+    <block>
+        <type>language</type>
+        <name>networks</name>
+        <cell><![CDATA[
+Graph {
+    links = [0 -> 1, 1 -> 2],
+    nodes = [2 -> {group = 1, label = "X"}]
+}
+]]></cell>
+    </block>
+
+    <block>
+        <type>language</type>
+        <name>networks</name>
+        <cell>[1 -> 2, 2 -> 3, 10 -> 11]</cell>
+    </block>
+
+    <block>
+        <type>language</type>
+        <name>networks</name>
+        <cell>["a" -> "b", "b" -> "c"]</cell>
+    </block>
+
+    <block>
+        <type>language</type>
+        <name>from</name>
+        <cell>x + 1 from [{x = 5}]</cell>
+    </block>
+
+    <block>
+        <type>language</type>
+        <name>select</name>
+        <cell><![CDATA[
+values <| select x from [{x=2}, {x=10}]
+        ]]></cell>
+    </block>
+
+    <block>
+        <type>language</type>
+        <name>graphics</name>
+        <cell><![CDATA[
+for i in range(10):
+    Circle {
+        x = cos(i * 0.2),
+        y = sin(i * 0.2),
+        r = 0.1,
+        fill = hsl(i * 10, 1, 0.5)
+    }
+        ]]></cell>
+    </block>
+
+</library>

@@ -1,0 +1,153 @@
+import library
+
+data RichText = Code String
+
+// not defining this as macro, will cause an issue
+// in the compilation of Function due to missing
+// async specifiers.
+@macro fn listing(name): Code(read(name))
+
+data Plot a b
+	= LinePlot {x: List a, y: List b}
+	| BarPlot {x: List a, y: List b}
+
+@priority(1) fn plot(xy: {x: List a, y: List b}):
+	LinePlot(xy)
+
+@priority(2) fn plot(xs: List Rule String Float):
+	BarPlot({x = keys(xs), y = values(xs)})
+
+@priority(0) fn plot(x):
+	x
+
+type MetaInfo = {
+	channel: String,
+	filename: String,
+	publishedAt: Int,
+	videoId: String,
+	duration: Float
+}
+
+data Row a
+	= MRow MetaInfo List {
+		p: Maybe a,
+		s: List {
+			startTime: Float,
+			endTime: Float
+		}
+	}
+	| SRow MetaInfo List {
+		startTime: Float,
+		endTime: Float,
+		columns: a
+	}
+	| URow a
+
+data Rows a = Rows List (Row a)
+
+fn make_union_row(a, b):
+	let x = (a, b):
+		URow(x)
+
+fn video_duration(x):
+	match (last x.shots):
+		case Just y: y.endTime
+		else: 0.
+
+fn video_metadata(video):
+	{
+        channel = video.channel,
+        filename = video.filename,
+        videoId = video.videoId,
+        duration = video_duration(video),
+        publishedAt = video.publishedAt
+    }
+
+fn make_select_row(video, data: List Rule s t):
+    SRow(video_metadata(video), for x in data: match x: case Rule s t:
+        {startTime = s.startTime, endTime = s.endTime, columns = t})
+
+fn make_match_row(video, data):
+    MRow(video_metadata(video), for x in data: match x: case Rule s p: {
+        p = p,
+        s = for x in s: {
+            startTime = x.startTime,
+            endTime = x.endTime
+        }
+    })
+
+@priority(1) fn make_row(video, x: List Rule List a Maybe b):
+  make_match_row(video, x)
+
+@priority(0) fn make_row(video, x: List Rule a b):
+  make_select_row(video, x)
+
+/* how to generate matches in lab mode:
+
+fn p1(video):
+	rewrite video.shots:
+		case [{faces=[]}]: "no-faces"
+
+Rows <| for video in corpus.videos:
+	make_match_row | video, p1(video)
+
+how to generate selects
+
+Rows <| for video in corpus.videos:
+	make_select_row | video, select angle from video.shots
+*/
+
+fn hits(xs):
+	Rows <| for x in xs:
+		match x: case Rule video y: make_row(video, y)
+
+/*
+let xs = (batch corpus.videos:
+select avg(faces.gaze.h) ?? 0. from shots):
+for x in xs: match x: case Rule video y: make_select_row(video, y)
+*/
+
+data Explorer a = Explorer1 a | Explorer2 a
+
+fn data_explorer2(options, xs):  // e.g. v1 | .channel, batch ...
+	Explorer1({
+		s = to_sequences(for video -> ys in xs:
+			options.key(video) -> for u -> v in ys: {state = v, _span = {
+				startTime = bounds(u).startTime, endTime = bounds(u).endTime}}),
+		m = for video -> ys in xs: {filename = video.filename, id = video.videoId, spans = for u -> v in ys: {
+			startTime = bounds(u).startTime, endTime = bounds(u).endTime
+		}}
+	})
+
+fn data_explorer(xs):
+	data_explorer2({key = .channel}, xs)
+
+@async fn data_atlas(options, xs):  // e.g. v1 | .channel, batch ...
+	let s = to_sequences(for video -> ys in xs:
+		options.key(video) -> for u -> v in ys: {state = v}):
+		Explorer2({sequences = s, atlas = explorer2(s.alphabet, s.sequences, 5, 4), n = 5, r = 4})
+// {startTime = u.startTime, endTime = u.endTime, state = v}
+
+// plots
+
+fn cov(xs):
+    for Rule(video, rs) in xs:
+        (video.channel, (sum for Rule(k, Just v) in rs: 1) / len(rs))
+
+fn gcov(xs):
+    for Rule(k, v) in group(cov(xs), fn (k, v): k):
+      k -> avg(for (_, x) in v: x) ?? 0.
+
+fn stat(xs):
+	plot <| gcov <| xs
+
+// use as: plot <| gcov <| batch corpus.videos: ...
+
+// example data for lab mode
+examples = {
+	span1 = [{startTime = 0, endTime = 10, y = 5}, {startTime = 10, endTime = 20, y = 10}],
+	span2 = [{startTime = 5, endTime = 10, z = 7}, {startTime = 7, endTime = 20, z = 11}]
+}
+
+//internal-schema = parseProgram(schema)
+internal-library = read("library_v1.xml")

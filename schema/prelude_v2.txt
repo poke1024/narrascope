@@ -150,4 +150,4 @@ examples = {
 }
 
 //internal-schema = parseProgram(schema)
-internal-library = read("library.xml")
+internal-library = read("library_v2.xml")

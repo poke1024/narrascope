@@ -71,7 +71,8 @@ type SpeakerTurn = {
 	tags: List Fuzzy String,
 	sentiment: String,
 	gender: Gender,
-	emotion: String
+	emotion: String,
+	evaluative: Float
 }
 
 type HeadPose = {
