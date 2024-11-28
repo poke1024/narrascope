@@ -11,14 +11,15 @@ import datetime
 import traceback
 import logging
 import sys
+import multiprocessing
 
 from pathlib import Path
 from tqdm import tqdm
 from itertools import groupby, chain
-from functools import reduce
+from functools import reduce, cache, partial
 from intervaltree import Interval, IntervalTree
 
-SCHEMA_VERSION = "2024-06-21"
+SCHEMA_VERSION = "2024-11-28"
 
 logging.basicConfig(stream=sys.stdout, level=logging.INFO)
 
@@ -26,6 +27,17 @@ logging.basicConfig(stream=sys.stdout, level=logging.INFO)
 class Video:
 	def __init__(self, path):
 		pass
+
+
+def export_video(p, catalog_path):
+	catalog = SimpleCatalogV2.load(catalog_path)
+	video = Video(p)
+	try:
+		return video.export(catalog)
+	except Exception as e:
+		logging.error(f"failed to process {p}")
+		logging.exception(e)
+		return None
 
 
 class Corpus:
@@ -44,20 +56,21 @@ class Corpus:
 
 		return Corpus(files)
 
-	def export(self, out_path: Path, limit=None):
-		catalog = SimpleCatalogV2()
+	def export(self, out_path: Path, catalog_path: Path, limit=None, processes=1):
 		video_data = []
 
 		if limit is None or limit < 0:
 			limit = len(self.files)
 
-		for p in tqdm(self.files[:limit]):
-			video = Video(p)
-			try:
-				video_data.append(video.export(catalog))
-			except Exception as e:
-				logging.error(f"failed to process {p}")
-				logging.exception(e)
+		files = self.files[:limit]
+
+		with multiprocessing.Pool(processes=processes) as pool:
+			with tqdm(total=len(files)) as pbar:
+				f = partial(export_video, catalog_path=catalog_path)
+				for data in pool.imap_unordered(f, files):
+					if data is not None:
+						video_data.append(data)
+					pbar.update(1)
 
 		with open(out_path, "w") as f:
 			f.write(json.dumps({
@@ -945,11 +958,17 @@ class SimpleCatalogV1:
 		
 		
 class SimpleCatalogV2:
-		def __init__(self):
-			self.records = dict()
-			with open("/local/u/liebl/dienste/narrascope/catalog.json", "r") as f:
+		def __init__(self, records):
+			self.records = records
+
+		@staticmethod
+		@cache
+		def load(p: Path):
+			records = dict()
+			with open(p, "r") as f:
 				for r in json.loads(f.read()):
-					self.records[r["filename"].split(".")[0]] = r
+					records[r["filename"].split(".")[0]] = r
+			return SimpleCatalogV2(records)
 	
 		def get(self, path: Path):
 			if path.parent.name == "Tagesschau":
@@ -1014,8 +1033,10 @@ class Video:
 @click.command()
 @click.argument('pkl', type=click.Path(exists=True, file_okay=False))
 @click.argument('out', type=click.Path(exists=False))
+@click.option('--catalog', type=click.Path(exists=True), required=True)
 @click.option('--limit', type=int, default=-1)
-def tib2nar(pkl, out, limit: int):
+@click.option('--processes', type=int, default=1)
+def tib2nar(pkl, out, catalog, limit: int, processes: int):
 	"""Convert directory of TIB files (PKL) to narrascope JSON data file (OUT)."""
 	out = Path(out)
 	if not out.suffix == ".json":
@@ -1026,7 +1047,7 @@ def tib2nar(pkl, out, limit: int):
 
 	try:
 		corpus = Corpus.read(Path(pkl))
-		corpus.export(out, limit)
+		corpus.export(out, catalog, limit, processes=processes)
 	except:
 		traceback.print_exc()
 	else:
