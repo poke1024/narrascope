@@ -279,10 +279,9 @@ class FaceData:
 		faces = []
 
 		ivs = self.tree.overlap(t0, t1)
-		ivs = [iv for iv in ivs if iv.data["cluster_id"] is not None]
 
 		for i, iv in enumerate(ivs):
-			if iv.data["cluster_id"] < 0:
+			if iv.data["cluster_id"] is None or iv.data["cluster_id"] < 0:
 				iv.data["cluster_id"] = -(1 + i)  # unique id
 
 		key = lambda x: x.data["cluster_id"]
