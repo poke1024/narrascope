@@ -843,6 +843,23 @@ class ShotData:
 			}
 
 
+class SpeakerTurnLabelData:
+	def __init__(self, path, name, extract):
+		with open(path / name, "rb") as f:
+			data = pickle.load(f)
+
+		ivs = []
+		for x in data["output_data"]:
+			ivs.append((x["start"], x["end"], extract(x["label"])))
+		ivs = [x for x in ivs if x[0] < x[1]]
+
+		self.tree = IntervalTree.from_tuples(ivs)
+
+	def query(self, t0, t1):
+		xs = [iv.data for iv in self.tree.overlap(t0, t1)]
+		return np.mean(xs) if len(xs) > 0 else 0
+
+
 class SpeakerTurnData:
 	def __init__(self, path):
 		with open(path / "asr_whisperx.pkl", "rb") as f:
@@ -859,6 +876,10 @@ class SpeakerTurnData:
 		speaker_audio_clf = SpeakerAudioClfData(self.path)
 		speaker_segment_clf = SpeakerSegmentClfData(self.path)
 		ent_data = EntitiesData(self.path)
+		evaluative_data = SpeakerTurnLabelData(
+			self.path,
+			"llm_evaluative.pkl",
+			lambda x: 1 if x == "evaluative" else 0)
 
 		for turn in self.turns:
 			t0 = float(turn["start"])
@@ -874,7 +895,8 @@ class SpeakerTurnData:
 				"sentiment": speaker_sentiment.query(t0, t1),
 				"tags": speaker_audio_clf.query(t0, t1),
 				"gender": speaker_segment_clf.gender(t0, t1),
-				"emotion": top_of_p_list(emotions)
+				"emotion": top_of_p_list(emotions),
+				"evaluative": evaluative_data.query(t0, t1)
 			}
 
 
