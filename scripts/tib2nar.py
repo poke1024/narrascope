@@ -19,7 +19,7 @@ from itertools import groupby, chain
 from functools import reduce, cache, partial
 from intervaltree import Interval, IntervalTree
 
-SCHEMA_VERSION = "2024-11-28"
+SCHEMA_VERSION = "2024-11-29"
 
 logging.basicConfig(stream=sys.stdout, level=logging.INFO)
 
@@ -843,6 +843,28 @@ class ShotData:
 			}
 
 
+class SpeakerTurnActiveData:
+	def __init__(self, path):
+		with open(path / "speaker_turns_meta.pkl", "rb") as f:
+			data = pickle.load(f)
+
+		ivs = []
+		for x in data["output_data"]:
+			ivs.append((x["start"], x["end"], x["active"]))
+		ivs = [x for x in ivs if x[0] < x[1]]
+
+		self.tree = IntervalTree.from_tuples(ivs)
+
+	def query(self, t0, t1):
+		w = 0
+		for iv in self.tree.overlap(t0, t1):
+			r1 = max(t0, iv.begin)
+			r2 = min(t1, iv.end)
+			if r1 < r2 and iv.data:
+				w += r2 - r1
+		return w / (t1 - t0) > 0.5
+
+
 class SpeakerTurnLabelData:
 	def __init__(self, path, name, extract):
 		with open(path / name, "rb") as f:
@@ -876,6 +898,7 @@ class SpeakerTurnData:
 		speaker_audio_clf = SpeakerAudioClfData(self.path)
 		speaker_segment_clf = SpeakerSegmentClfData(self.path)
 		ent_data = EntitiesData(self.path)
+		active_data = SpeakerTurnActiveData(self.path)
 		evaluative_data = SpeakerTurnLabelData(
 			self.path,
 			"llm_evaluative.pkl",
@@ -896,6 +919,7 @@ class SpeakerTurnData:
 				"tags": speaker_audio_clf.query(t0, t1),
 				"gender": speaker_segment_clf.gender(t0, t1),
 				"emotion": top_of_p_list(emotions),
+				"active": active_data.query(t0, t1),
 				"evaluative": evaluative_data.query(t0, t1)
 			}
 
