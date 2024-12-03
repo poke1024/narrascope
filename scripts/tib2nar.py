@@ -848,16 +848,16 @@ class SpeakerTurnActiveData:
 		with open(path / "speaker_turns_meta.pkl", "rb") as f:
 			data = pickle.load(f)
 
-		ivs = []
+		ivs = collections.defaultdict(list)
 		for x in data["output_data"]:
-			ivs.append((x["start"], x["end"], x["active"]))
-		ivs = [x for x in ivs if x[0] < x[1]]
+			ivs[x["speaker"]].append((x["start"], x["end"], x["active"]))
 
-		self.tree = IntervalTree.from_tuples(ivs)
+		self.tree = {k: IntervalTree.from_tuples(
+			[x for x in v if x[0] < x[1]]) for k, v in ivs.items()}
 
-	def query(self, t0, t1):
+	def query(self, t0, t1, speaker):
 		w = 0
-		for iv in self.tree.overlap(t0, t1):
+		for iv in self.tree[speaker].overlap(t0, t1):
 			r1 = max(t0, iv.begin)
 			r2 = min(t1, iv.end)
 			if r1 < r2 and iv.data:
@@ -870,15 +870,15 @@ class SpeakerTurnLabelData:
 		with open(path / name, "rb") as f:
 			data = pickle.load(f)
 
-		ivs = []
+		ivs = collections.defaultdict(list)
 		for x in data["output_data"]:
-			ivs.append((x["start"], x["end"], extract(x["label"])))
-		ivs = [x for x in ivs if x[0] < x[1]]
+			ivs[x["speaker"]].append((x["start"], x["end"], extract(x["label"])))
 
-		self.tree = IntervalTree.from_tuples(ivs)
+		self.tree = {k: IntervalTree.from_tuples(
+			[x for x in v if x[0] < x[1]]) for k, v in ivs.items()}
 
-	def query(self, t0, t1):
-		xs = [iv.data for iv in self.tree.overlap(t0, t1)]
+	def query(self, t0, t1, speaker):
+		xs = [iv.data for iv in self.tree[speaker].overlap(t0, t1)]
 		return np.mean(xs) if len(xs) > 0 else 0
 
 
@@ -893,6 +893,13 @@ class SpeakerTurnData:
 		self.path = path
 
 	def iter(self):
+		sentiment2_to_value = {
+			'very negative': -1,
+			'neutral': 0,
+			'very positive': 1,
+			'None': 0
+		}
+
 		speaker_sentiment = SpeakerSentimentData(self.path)
 		speaker_word_class = SpeakerWordClassData(self.path)
 		speaker_audio_clf = SpeakerAudioClfData(self.path)
@@ -903,6 +910,10 @@ class SpeakerTurnData:
 			self.path,
 			"llm_evaluative.pkl",
 			lambda x: 1 if x == "evaluative" else 0)
+		sentiment_2_data = SpeakerTurnLabelData(
+			self.path,
+			"llm_sentiment_2.pkl",
+			lambda x: sentiment2_to_value[x])
 
 		for turn in self.turns:
 			t0 = float(turn["start"])
@@ -919,8 +930,9 @@ class SpeakerTurnData:
 				"tags": speaker_audio_clf.query(t0, t1),
 				"gender": speaker_segment_clf.gender(t0, t1),
 				"emotion": top_of_p_list(emotions),
-				"active": active_data.query(t0, t1),
-				"evaluative": evaluative_data.query(t0, t1)
+				"active": active_data.query(t0, t1, turn["speaker"]),
+				"evaluative": evaluative_data.query(t0, t1, turn["speaker"]),
+				"sentiment2": sentiment_2_data.query(t0, t1, turn["speaker"])
 			}
 
 
