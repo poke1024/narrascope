@@ -72,9 +72,11 @@ type SpeakerTurn = {
 	sentiment: String,
 	gender: Gender,
 	emotion: String,
-	active: Bool,
+	active: Float,
 	evaluative: Float,
-	sentiment2: Int
+	sentiment2: Int,
+	role: String,
+	situation: String
 }
 
 type HeadPose = {

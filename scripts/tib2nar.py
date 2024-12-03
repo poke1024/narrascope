@@ -843,26 +843,37 @@ class ShotData:
 			}
 
 
-class SpeakerTurnActiveData:
+class SpeakerTurnMetaData:
 	def __init__(self, path):
 		with open(path / "speaker_turns_meta.pkl", "rb") as f:
 			data = pickle.load(f)
 
 		ivs = collections.defaultdict(list)
 		for x in data["output_data"]:
-			ivs[x["speaker"]].append((x["start"], x["end"], x["active"]))
+			ivs[x["speaker"]].append((x["start"], x["end"], x))
 
 		self.tree = {k: IntervalTree.from_tuples(
 			[x for x in v if x[0] < x[1]]) for k, v in ivs.items()}
 
 	def query(self, t0, t1, speaker):
-		w = 0
+		records = []
+
 		for iv in self.tree[speaker].overlap(t0, t1):
 			r1 = max(t0, iv.begin)
 			r2 = min(t1, iv.end)
-			if r1 < r2 and iv.data:
-				w += r2 - r1
-		return w / (t1 - t0) > 0.5
+			if r1 < r2:
+				records.append((r2 - r1, iv.data))
+
+		if not records:
+			return {
+				'active_ratio': 0,
+				'role_l0': 'unsure',
+				'situation': 'unsure'
+			}
+		else:
+			i = np.argmax([x[0] for x in records])
+			return records[i][1]
+
 
 
 class SpeakerTurnLabelData:
@@ -905,7 +916,7 @@ class SpeakerTurnData:
 		speaker_audio_clf = SpeakerAudioClfData(self.path)
 		speaker_segment_clf = SpeakerSegmentClfData(self.path)
 		ent_data = EntitiesData(self.path)
-		active_data = SpeakerTurnActiveData(self.path)
+		meta_data = SpeakerTurnMetaData(self.path)
 		evaluative_data = SpeakerTurnLabelData(
 			self.path,
 			"llm_evaluative.pkl",
@@ -919,6 +930,7 @@ class SpeakerTurnData:
 			t0 = float(turn["start"])
 			t1 = float(turn["end"])
 			emotions = speaker_segment_clf.emotion(t0, t1)
+			meta = meta_data.query(t0, t1, turn["speaker"])
 			yield {
 				"id": turn["speaker"],
 				"startTime": t0,
@@ -930,7 +942,9 @@ class SpeakerTurnData:
 				"tags": speaker_audio_clf.query(t0, t1),
 				"gender": speaker_segment_clf.gender(t0, t1),
 				"emotion": top_of_p_list(emotions),
-				"active": active_data.query(t0, t1, turn["speaker"]),
+				"active": meta['active_ratio'],
+				"role": meta['role_l0'],
+				"situation": meta['situation'],
 				"evaluative": evaluative_data.query(t0, t1, turn["speaker"]),
 				"sentiment2": sentiment_2_data.query(t0, t1, turn["speaker"])
 			}
