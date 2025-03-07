@@ -30,7 +30,11 @@ class Video:
 
 
 def export_video(p, catalog_path):
-	catalog = SimpleCatalogV2.load(catalog_path)
+	if catalog_path:
+		catalog = SimpleCatalogV2.load(catalog_path)
+	else:
+		catalog = FallbackCatalog()
+		
 	video = Video(p)
 	try:
 		return video.export(catalog)
@@ -40,6 +44,16 @@ def export_video(p, catalog_path):
 		return None
 
 
+def gather_files(p: Path, files):
+	for q in p.iterdir():
+		if q.is_dir():
+			if (q / "transnet_shotdetection.pkl").exists():
+				files.append(q)
+			else:
+				gather_files(q, files)
+	
+
+
 class Corpus:
 	def __init__(self, files):
 		self.files = files
@@ -47,13 +61,9 @@ class Corpus:
 	@staticmethod
 	def read(base_path: Path):
 		files = []
-
-		for channel_path in base_path.iterdir():
-			if not channel_path.name.startswith("."):
-				for video_path in channel_path.iterdir():
-					if (video_path / "transnet_shotdetection.pkl").exists():
-						files.append(video_path)
-
+		gather_files(base_path, files)
+		if not files:
+			raise RuntimeError(f"failed to find any files under {base_path}")
 		return Corpus(files)
 
 	def export(self, out_path: Path, catalog_path: Path, limit=None, processes=1):
@@ -635,38 +645,27 @@ class ShotScaleMovementData:
 
 		ivs = []
 		for x in self.shot_angle_data["output_data"]:
-			scale, movement = x["prediction"]
+			p = x["prediction"]			
+			scale, cumulative_distance, movement = p
+
 			ivs.append((
-				x["shot"]["start"],
-				x["shot"]["end"], {
-					"scale": full_scale_names[scale.upper()],
-					"movement": movement.upper()
-				}))
+			x["shot"]["start"],
+			x["shot"]["end"], {
+				"scale": full_scale_names[scale.upper()],
+				"cumulative_distance": cumulative_distance,
+				"movement": movement.upper()
+			}))
+					
 		self.records = ShotRecords(ivs)
 
 	def scale(self, t0, t1):
 		return self.records.query(t0, t1)["scale"]
+		
+	def cumulative_distance(self, t0, t1):
+		return self.records.query(t0, t1)["cumulative_distance"]
 
 	def movement(self, t0, t1):
 		return self.records.query(t0, t1)["movement"]
-
-
-class LayoutData:
-	def __init__(self, path):
-		with open(path / "layout_detection.pkl", "rb") as f:
-			self.data = pickle.load(f)
-
-		ivs = []
-		for x in self.data["output_data"]:
-			ivs.append((
-				x["start"],
-				x["end"], {
-					"imageCount": x["layout_image_cnt"]
-				}))
-		self.records = ShotRecords(ivs)
-
-	def query(self, t0, t1):
-		return self.records.query(t0, t1)
 
 
 class VLMData:
@@ -764,7 +763,6 @@ class ShotData:
 		shot_angle_data = ShotAngleData(self.path)
 		shot_level_data = ShotLevelData(self.path)
 		scale_movement_data = ShotScaleMovementData(self.path)
-		layout_data = LayoutData(self.path)
 		
 		if self.instruct_blip:
 			place_data = VLMData(self.path, "locations", renames={
@@ -832,14 +830,14 @@ class ShotData:
 				"angle": shot_angle_data.query(t0, t1),
 				"level": shot_level_data.query(t0, t1),
 				"movement": scale_movement_data.movement(t0, t1),
+				"cumulative_distance": scale_movement_data.cumulative_distance(t0, t1),
 				"people": num_faces,
 				"faces": faces,
 				"tags": speaker_audio_clf.query(t0, t1),
 				"next1": query_sim(t0, t1, "next_1"),
 				"next2": query_sim(t0, t1, "next_2"),
 				"place": place_data.query(t0, t1) if place_data else [],
-				"roles": roles_data.query(t0, t1),
-				"layout": layout_data.query(t0, t1)
+				"roles": roles_data.query(t0, t1)
 			}
 
 
@@ -857,12 +855,13 @@ class SpeakerTurnMetaData:
 
 	def query(self, t0, t1, speaker):
 		records = []
-
-		for iv in self.tree[speaker].overlap(t0, t1):
-			r1 = max(t0, iv.begin)
-			r2 = min(t1, iv.end)
-			if r1 < r2:
-				records.append((r2 - r1, iv.data))
+		
+		if speaker in self.tree:
+			for iv in self.tree[speaker].overlap(t0, t1):
+				r1 = max(t0, iv.begin)
+				r2 = min(t1, iv.end)
+				if r1 < r2:
+					records.append((r2 - r1, iv.data))
 
 		if not records:
 			return {
@@ -889,8 +888,11 @@ class SpeakerTurnLabelData:
 			[x for x in v if x[0] < x[1]]) for k, v in ivs.items()}
 
 	def query(self, t0, t1, speaker):
-		xs = [iv.data for iv in self.tree[speaker].overlap(t0, t1)]
-		return np.mean(xs) if len(xs) > 0 else 0
+		if speaker in self.tree:
+			xs = [iv.data for iv in self.tree[speaker].overlap(t0, t1)]
+			return np.mean(xs) if len(xs) > 0 else 0
+		else:
+			return 0
 
 
 class SpeakerTurnData:
@@ -950,7 +952,12 @@ class SpeakerTurnData:
 			}
 
 
-class SimpleCatalogV1:
+class Catalog:
+	def get(self, path: Path):
+		raise NotImplementedError()
+
+
+class SimpleCatalogV1(Catalog):
 	def get(self, path: Path):
 		if path.parent.name == "Tagesschau":
 			m = re.search(r"TV-(\d+)-(\d+)-(\d+)", path.stem)
@@ -1030,11 +1037,22 @@ class SimpleCatalogV1:
 				}
 			else:
 				raise RuntimeError(f"failed to parse name {path.stem}")
-
 		return None
 		
 		
-class SimpleCatalogV2:
+class FallbackCatalog(Catalog):
+	def get(self, path: Path):
+		return {
+			"filename": path.name,
+			"channel": "none",
+			"title": path.name,
+			"publishedAt": datetime.datetime.today().timestamp(),
+			"url": "",
+			"id": path.name
+		}
+		
+		
+class SimpleCatalogV2(Catalog):
 		def __init__(self, records):
 			self.records = records
 
@@ -1110,7 +1128,7 @@ class Video:
 @click.command()
 @click.argument('pkl', type=click.Path(exists=True, file_okay=False))
 @click.argument('out', type=click.Path(exists=False))
-@click.option('--catalog', type=click.Path(exists=True), required=True)
+@click.option('--catalog', type=click.Path(exists=True), required=False)
 @click.option('--limit', type=int, default=-1)
 @click.option('--processes', type=int, default=1)
 def tib2nar(pkl, out, catalog, limit: int, processes: int):
