@@ -1046,7 +1046,7 @@ class FallbackCatalog(Catalog):
 			"filename": path.name,
 			"channel": "none",
 			"title": path.name,
-			"publishedAt": datetime.datetime.today().timestamp(),
+			"publishedAt": int(datetime.datetime.today().timestamp()),
 			"url": "",
 			"id": path.name
 		}
