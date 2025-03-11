@@ -830,7 +830,7 @@ class ShotData:
 				"angle": shot_angle_data.query(t0, t1),
 				"level": shot_level_data.query(t0, t1),
 				"movement": scale_movement_data.movement(t0, t1),
-				"cumulative_distance": scale_movement_data.cumulative_distance(t0, t1),
+				"cumulativeDistance": scale_movement_data.cumulative_distance(t0, t1),
 				"people": num_faces,
 				"faces": faces,
 				"tags": speaker_audio_clf.query(t0, t1),
@@ -1044,7 +1044,7 @@ class FallbackCatalog(Catalog):
 	def get(self, path: Path):
 		return {
 			"filename": path.name,
-			"channel": "none",
+			"channel": path.name,
 			"title": path.name,
 			"publishedAt": int(datetime.datetime.today().timestamp()),
 			"url": "",
